@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
+import { motion } from 'framer-motion';
 import { api } from '@/lib/api';
 import { TRIGGER_LABELS, type Workflow, type TriggerType } from '@/lib/types';
 
@@ -54,20 +55,36 @@ export default function WorkflowsPage() {
           .
         </div>
       ) : (
-        <div className="grid gap-4">
+        <motion.div
+          className="grid gap-4"
+          initial="hidden"
+          animate="show"
+          variants={{ show: { transition: { staggerChildren: 0.06 } } }}
+        >
           {workflows.map((wf) => (
-            <div key={wf.id} className="card flex items-center justify-between">
+            <motion.div
+              key={wf.id}
+              variants={{ hidden: { opacity: 0, y: 16 }, show: { opacity: 1, y: 0 } }}
+              transition={{ duration: 0.4, ease: [0.21, 0.47, 0.32, 0.98] }}
+              whileHover={{ y: -3 }}
+              className="card card-hover flex items-center justify-between"
+            >
               <div>
                 <div className="flex items-center gap-2">
-                  <Link href={`/workflows/${wf.id}`} className="font-medium hover:text-brand">
+                  <Link href={`/workflows/${wf.id}`} className="font-display font-semibold text-white transition hover:text-violet-300">
                     {wf.name}
                   </Link>
-                  <span
-                    className={`h-2 w-2 rounded-full ${wf.isActive ? 'bg-emerald-400' : 'bg-slate-600'}`}
-                    title={wf.isActive ? 'Active' : 'Inactive'}
-                  />
+                  <span className="relative inline-flex h-2 w-2">
+                    {wf.isActive && (
+                      <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400/70" />
+                    )}
+                    <span
+                      className={`relative h-2 w-2 rounded-full ${wf.isActive ? 'bg-emerald-400' : 'bg-slate-600'}`}
+                      title={wf.isActive ? 'Active' : 'Inactive'}
+                    />
+                  </span>
                 </div>
-                <p className="mt-1 text-xs text-slate-400">
+                <p className="mt-1.5 text-xs text-slate-400">
                   {wf.trigger ? TRIGGER_LABELS[wf.trigger.type as TriggerType] : 'No trigger'} ·{' '}
                   {wf._count?.actions ?? 0} actions · {wf._count?.logs ?? 0} runs
                 </p>
@@ -86,9 +103,9 @@ export default function WorkflowsPage() {
                   Delete
                 </button>
               </div>
-            </div>
+            </motion.div>
           ))}
-        </div>
+        </motion.div>
       )}
     </div>
   );

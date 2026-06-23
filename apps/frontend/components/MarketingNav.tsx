@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { Logo } from './Logo';
+import { ThemeToggle } from './ThemeToggle';
 
 /** Sticky glass nav for the public (logged-out) marketing + learn pages. */
 export function MarketingNav() {
@@ -21,6 +22,7 @@ export function MarketingNav() {
           </Link>
         </nav>
         <div className="flex items-center gap-2">
+          <ThemeToggle />
           <Link href="/login" className="btn-ghost hidden py-2 sm:inline-flex">
             Sign in
           </Link>

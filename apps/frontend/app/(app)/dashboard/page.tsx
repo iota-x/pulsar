@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { api } from '@/lib/api';
 import type { DashboardStats } from '@/lib/types';
 import { StatusBadge } from '@/components/StatusBadge';
+import { OnboardingChecklist } from '@/components/OnboardingChecklist';
 
 function StatCard({
   label,
@@ -48,6 +49,8 @@ export default function DashboardPage() {
           + New workflow
         </Link>
       </div>
+
+      <OnboardingChecklist stats={stats} />
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         <StatCard label="Total workflows" value={stats.totalWorkflows} bar="bg-gradient-to-r from-violet-500/0 via-violet-500/60 to-violet-500/0" />

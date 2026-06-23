@@ -7,6 +7,7 @@ import { useAuth } from '@/lib/auth';
 import { tokenStore } from '@/lib/api';
 import { AuroraBackground } from '@/components/AuroraBackground';
 import { Logo } from '@/components/Logo';
+import { ThemeToggle } from '@/components/ThemeToggle';
 
 const nav = [
   { href: '/dashboard', label: 'Dashboard' },
@@ -36,7 +37,10 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     <div className="relative min-h-screen">
       <AuroraBackground grid={false} />
 
-      <header className="sticky top-0 z-40 border-b border-white/[0.06] bg-[#050611]/70 backdrop-blur-xl">
+      <header
+        className="sticky top-0 z-40 border-b border-white/[0.06] backdrop-blur-xl"
+        style={{ background: 'color-mix(in srgb, var(--bg) 72%, transparent)' }}
+      >
         <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-3">
           <div className="flex items-center gap-8">
             <Logo href="/dashboard" />
@@ -59,6 +63,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           </div>
           <div className="flex items-center gap-3 text-sm">
             <span className="hidden text-slate-400 sm:inline">{user?.email}</span>
+            <ThemeToggle />
             <button onClick={logout} className="btn-ghost py-1.5">
               Logout
             </button>
