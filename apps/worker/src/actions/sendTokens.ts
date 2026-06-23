@@ -11,11 +11,15 @@ import {
 } from '@solana/spl-token';
 import type { ActionHandler } from './types';
 import { connection, getSigner, explorerUrl, toPublicKey } from '../solana';
+import { callDelegatedTransfer } from '../anchorProgram';
 
 /**
- * Send tokens on Solana for real. With no `mint` it transfers native SOL; with
- * a `mint` it transfers that SPL token (creating the recipient's associated
- * token account if needed, paid for by the signer). `amount` is in UI units.
+ * Send tokens on Solana for real.
+ *   - With `owner` set → non-custodial DELEGATED transfer: moves the token from
+ *     that user's wallet (they pre-authorized a capped delegation). Requires `mint`.
+ *   - No `mint` → native SOL transfer from the operator signer.
+ *   - `mint` only → SPL transfer from the operator signer.
+ * `amount` is in UI units.
  */
 export const sendTokens: ActionHandler = async (config) => {
   const signer = getSigner();
@@ -27,6 +31,17 @@ export const sendTokens: ActionHandler = async (config) => {
   if (!Number.isFinite(amount) || amount <= 0) throw new Error('send_tokens: valid "amount" is required');
 
   const recipient = toPublicKey(config.to, 'send_tokens recipient');
+
+  // --- Delegated (non-custodial) SPL transfer from a user's own wallet ---
+  if (config.owner) {
+    if (!config.mint) throw new Error('send_tokens: delegated mode requires "mint"');
+    const owner = toPublicKey(config.owner, 'send_tokens owner');
+    const mint = toPublicKey(config.mint, 'send_tokens mint');
+    const decimals = (await getMint(connection, mint)).decimals;
+    const raw = BigInt(Math.round(amount * 10 ** decimals));
+    const url = await callDelegatedTransfer(owner, mint, recipient, raw);
+    return `Sent ${amount} of ${config.mint} from ${config.owner} (delegated) — ${url}`;
+  }
 
   // --- Native SOL transfer ---
   if (!config.mint) {

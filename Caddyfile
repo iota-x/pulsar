@@ -1,0 +1,13 @@
+# Auto-HTTPS reverse proxy. Caddy fetches + renews a free Let's Encrypt cert for
+# $DOMAIN automatically. Frontend is served at /, the API under /api/*.
+{$DOMAIN} {
+	# /api/* → backend (the prefix is stripped, so /api/auth/login → /auth/login)
+	handle_path /api/* {
+		reverse_proxy backend:4000
+	}
+
+	# everything else → the Next.js frontend
+	handle {
+		reverse_proxy frontend:3000
+	}
+}

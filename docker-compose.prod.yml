@@ -1,0 +1,120 @@
+# Production stack for a single always-on box (e.g. an Oracle Cloud free VM).
+#   cp .env.example .env   # then fill it in
+#   docker compose -f docker-compose.prod.yml up -d --build
+#
+# Reads variables from .env (compose auto-loads it). The frontend's public API
+# URL is baked at build time from PUBLIC_API_URL.
+
+# Own project name so prod volumes/networks never collide with the dev compose.
+name: pulsar-prod
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_DB: ${POSTGRES_DB:-postgres}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U ${POSTGRES_USER:-postgres}']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ['redis-server', '--appendonly', 'yes']
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # One-shot: apply database migrations, then exit.
+  migrate:
+    image: web3-zapier:latest
+    build:
+      context: .
+      args:
+        NEXT_PUBLIC_API_URL: ${PUBLIC_API_URL:-http://localhost:4000}
+    command: npm run prisma:deploy --workspace=backend
+    env_file: .env
+    restart: 'no'
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  backend:
+    image: web3-zapier:latest
+    command: npx tsx apps/backend/src/index.ts
+    env_file: .env
+    restart: unless-stopped
+    ports:
+      - '4000:4000'
+    depends_on:
+      redis:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+
+  worker:
+    image: web3-zapier:latest
+    command: npx tsx apps/worker/src/index.ts
+    env_file: .env
+    restart: unless-stopped
+    depends_on:
+      redis:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+
+  trigger:
+    image: web3-zapier:latest
+    command: npx tsx apps/trigger-service/src/index.ts
+    env_file: .env
+    restart: unless-stopped
+    depends_on:
+      redis:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+
+  frontend:
+    image: web3-zapier:latest
+    command: sh -c "cd apps/frontend && npx next start -H 0.0.0.0 -p 3000"
+    env_file: .env
+    restart: unless-stopped
+    ports:
+      - '3000:3000'
+    depends_on:
+      - backend
+
+  # Optional auto-HTTPS reverse proxy. Enable with: --profile https
+  # Requires DOMAIN set in .env and the domain's DNS A-record pointing at this VM.
+  caddy:
+    image: caddy:2-alpine
+    profiles: ['https']
+    restart: unless-stopped
+    env_file: .env
+    ports:
+      - '80:80'
+      - '443:443'
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - frontend
+      - backend
+
+volumes:
+  pgdata:
+  redisdata:
+  caddy_data:
+  caddy_config:

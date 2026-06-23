@@ -6,6 +6,11 @@ import {
   TransactionInstruction,
   sendAndConfirmTransaction,
 } from '@solana/web3.js';
+import {
+  TOKEN_PROGRAM_ID,
+  getAssociatedTokenAddress,
+  getOrCreateAssociatedTokenAccount,
+} from '@solana/spl-token';
 import { connection, getSigner, explorerUrl } from './solana';
 
 /** Deployed web3_zapier program (devnet). Override via WEB3_ZAPIER_PROGRAM_ID. */
@@ -29,6 +34,13 @@ function borshString(value: string): Buffer {
 /** Borsh-encode a bool as a single byte. */
 function borshBool(value: boolean): Buffer {
   return Buffer.from([value ? 1 : 0]);
+}
+
+/** Little-endian u64. */
+function u64(n: bigint): Buffer {
+  const b = Buffer.alloc(8);
+  b.writeBigUInt64LE(n);
+  return b;
 }
 
 function requireSigner() {
@@ -74,6 +86,46 @@ export async function callPing(label: string): Promise<string> {
     keys: [{ pubkey: signer.publicKey, isSigner: true, isWritable: false }],
     data,
   });
+  const sig = await sendAndConfirmTransaction(connection, new Transaction().add(ix), [signer]);
+  return explorerUrl(sig);
+}
+
+/**
+ * Execute a non-custodial delegated token transfer: moves `amountRaw` (base
+ * units) of `mint` from the delegating user's wallet to `recipient`, signed by
+ * the program's authority PDA. The user authorized this once via create_delegation
+ * + SPL approve; we never hold their key. Reverts on-chain if it exceeds the cap
+ * or the delegation expired.
+ */
+export async function callDelegatedTransfer(
+  owner: PublicKey,
+  mint: PublicKey,
+  recipient: PublicKey,
+  amountRaw: bigint,
+): Promise<string> {
+  const signer = requireSigner();
+
+  const [authority] = PublicKey.findProgramAddressSync([Buffer.from('authority')], PROGRAM_ID);
+  const [delegation] = PublicKey.findProgramAddressSync(
+    [Buffer.from('delegation'), owner.toBuffer(), mint.toBuffer()],
+    PROGRAM_ID,
+  );
+  const source = await getAssociatedTokenAddress(mint, owner);
+  const dest = await getOrCreateAssociatedTokenAccount(connection, signer, mint, recipient);
+
+  const ix = new TransactionInstruction({
+    programId: PROGRAM_ID,
+    keys: [
+      { pubkey: delegation, isSigner: false, isWritable: true },
+      { pubkey: source, isSigner: false, isWritable: true },
+      { pubkey: dest.address, isSigner: false, isWritable: true },
+      { pubkey: authority, isSigner: false, isWritable: false },
+      { pubkey: signer.publicKey, isSigner: true, isWritable: false },
+      { pubkey: TOKEN_PROGRAM_ID, isSigner: false, isWritable: false },
+    ],
+    data: Buffer.concat([discriminator('execute_delegated_transfer'), u64(amountRaw)]),
+  });
+
   const sig = await sendAndConfirmTransaction(connection, new Transaction().add(ix), [signer]);
   return explorerUrl(sig);
 }

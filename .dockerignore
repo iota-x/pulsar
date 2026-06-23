@@ -1,0 +1,23 @@
+# Dependencies & build output (reinstalled/regenerated inside the image)
+**/node_modules
+**/.next
+**/.turbo
+**/dist
+
+# Rust / Anchor build artifacts — huge, never needed at runtime
+**/target
+apps/smart-contracts
+
+# Local env files (secrets are injected at runtime via env_file)
+**/.env
+**/.env.*
+!**/.env.example
+
+# Misc
+.git
+.gitignore
+**/*.log
+.DS_Store
+**/.DS_Store
+README.md
+DEPLOY.md
