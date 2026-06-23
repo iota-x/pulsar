@@ -101,10 +101,19 @@ What runs for real today vs. simulated:
   the trigger service). The rest are selectable/configurable; their detection is a documented
   extension point in `apps/trigger-service/src/watcher.ts`.
 - **Actions executed for real**: `send_webhook`, `send_discord_message`, `send_email`,
-  `send_notification`, `record_transaction_db`, `fetch_latest_transactions`, `store_log`, and the
+  `send_notification`, `record_transaction_db`, `fetch_latest_transactions`, `store_log`, the
   **on-chain SPL actions** `send_tokens` (native SOL or SPL), `mint_tokens`, `burn_tokens`,
-  `transfer_nft` — each builds, signs and submits a real Solana transaction. Any action without a
-  handler is recorded as **`simulated`** (selectable + logged honestly; needs an on-chain signer).
+  `transfer_nft`, native **`stake_unstake_tokens`** (Stake program: delegate / deactivate), and
+  **`execute_buy_sell_order`** (a real **Jupiter** swap via `api.jup.ag` — Jupiter routes mainnet
+  liquidity, so point `SOLANA_RPC_URL` at mainnet to actually fill; on devnet the quote returns a
+  real "not tradable"/"no route" response). Each on-chain action builds, signs and submits a real
+  transaction. Any action without a handler is recorded as **`simulated`** (selectable + logged
+  honestly; needs an on-chain signer or external protocol).
+
+  Still `simulated` because they need heavyweight external integrations: `create_liquidity_pool`
+  (Raydium/Orca SDK), `update_oracle_data` (a deployed oracle program — the `apps/smart-contracts`
+  Anchor program), `trigger_cross_chain_tx` (Wormhole + a destination chain), and the remaining
+  governance/contract-management actions.
 
 Adding a real handler is one file + one registry line in `apps/worker/src/actions/`.
 

@@ -356,9 +356,14 @@ export const ACTION_CATALOG: CatalogEntry<ActionType>[] = [
   {
     type: 'execute_buy_sell_order',
     label: 'Execute a buy/sell order',
-    description: 'Places a buy or sell order for a token when a condition is met.',
+    description: 'Swaps via Jupiter — buy spends SOL for the token, sell swaps the token back to SOL.',
     implementation: 'hybrid',
-    fields: [{ ...mint, label: 'Token mint', required: true }, { key: 'side', label: 'Side', type: 'select', options: ['buy', 'sell'] }, amount],
+    fields: [
+      { ...mint, label: 'Token mint', required: true },
+      { key: 'side', label: 'Side', type: 'select', options: ['buy', 'sell'] },
+      { key: 'amount', label: 'Amount (SOL to buy / tokens to sell)', type: 'number', required: true },
+      { key: 'slippageBps', label: 'Slippage (bps)', type: 'number', placeholder: '50' },
+    ],
   },
   {
     type: 'send_alert_and_rollback',
@@ -418,10 +423,15 @@ export const ACTION_CATALOG: CatalogEntry<ActionType>[] = [
   },
   {
     type: 'stake_unstake_tokens',
-    label: 'Stake / unstake tokens',
-    description: 'Stakes or unstakes tokens in a staking pool when triggered.',
+    label: 'Stake / unstake SOL',
+    description: 'Stakes native SOL to a validator, or deactivates a stake account to unstake.',
     implementation: 'smart_contract',
-    fields: [{ key: 'mode', label: 'Mode', type: 'select', options: ['stake', 'unstake'] }, amount, { key: 'validator', label: 'Validator / pool' }],
+    fields: [
+      { key: 'mode', label: 'Mode', type: 'select', options: ['stake', 'unstake'] },
+      { key: 'amount', label: 'Amount (SOL, to stake)', type: 'number', placeholder: 'e.g. 0.05' },
+      { key: 'validator', label: 'Validator vote account (stake; optional)', placeholder: 'Auto-picks an active validator if blank' },
+      { key: 'stakeAccount', label: 'Stake account (to unstake)', placeholder: 'Address returned when you staked' },
+    ],
   },
   {
     type: 'allocate_funds',

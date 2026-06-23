@@ -11,6 +11,8 @@ import { sendTokens } from './sendTokens';
 import { mintTokens } from './mintTokens';
 import { burnTokens } from './burnTokens';
 import { transferNft } from './transferNft';
+import { stakeUnstake } from './stakeUnstake';
+import { executeBuySellOrder } from './executeBuySellOrder';
 
 /**
  * Handlers for action types that run fully off-chain today. Action types absent
@@ -30,4 +32,6 @@ export const actionHandlers: Partial<Record<ActionType, ActionHandler>> = {
   mint_tokens: mintTokens,
   burn_tokens: burnTokens,
   transfer_nft: transferNft,
+  stake_unstake_tokens: stakeUnstake,
+  execute_buy_sell_order: executeBuySellOrder,
 };
