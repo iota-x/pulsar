@@ -1,41 +1,23 @@
-import { Request, Response } from 'express';
+import { Response } from 'express';
 import * as userService from '../services/userService';
+import { asyncHandler } from '../middlewares/errorHandler';
+import { registerSchema, loginSchema } from '../validation/schemas';
+import { AuthedRequest } from '../middlewares/authMiddleware';
 
-export const registerUser = async (req: Request, res: Response) => {
-  try {
-    const user = await userService.registerUser(req.body.email, req.body.password);
-    res.status(201).json(user);
-  } catch (error) {
-    if (error instanceof Error) {
-      res.status(500).json({ message: error.message });
-    } else {
-      res.status(500).json({ message: "Unexpected error occurred" });
-    }
-  }
-};
+export const registerUser = asyncHandler(async (req, res) => {
+  const { email, password } = registerSchema.parse(req.body);
+  const result = await userService.registerUser(email, password);
+  res.status(201).json(result);
+});
 
-export const loginUser = async (req: Request, res: Response) => {
-  try {
-    const result = await userService.loginUser(req.body.email, req.body.password);
-    res.status(200).json(result);
-  } catch (error) {
-    if (error instanceof Error) {
-      res.status(500).json({ message: error.message });
-    } else {
-      res.status(500).json({ message: "Unexpected error occurred" });
-    }
-  }
-};
+export const loginUser = asyncHandler(async (req, res) => {
+  const { email, password } = loginSchema.parse(req.body);
+  const result = await userService.loginUser(email, password);
+  res.status(200).json(result);
+});
 
-export const getUserById = async (req: Request, res: Response) => {
-  try {
-    const user = await userService.getUserById(req.params.id);
-    res.status(200).json(user);
-  } catch (error) {
-    if (error instanceof Error) {
-      res.status(500).json({ message: error.message });
-    } else {
-      res.status(500).json({ message: "Unexpected error occurred" });
-    }
-  }
-};
+/** Returns the currently authenticated user. */
+export const getMe = asyncHandler(async (req: AuthedRequest, res: Response) => {
+  const user = await userService.getUserById(req.userId!);
+  res.status(200).json(user);
+});

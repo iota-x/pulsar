@@ -1,9 +1,6 @@
 // This is your Prisma schema file,
 // learn more about it in the docs: https://pris.ly/d/prisma-schema
 
-// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
-// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
-
 generator client {
   provider = "prisma-client-js"
 }
@@ -27,8 +24,8 @@ model Workflow {
   name        String
   description String?
   userId      String
-  user        User      @relation(fields: [userId], references: [id])
-  triggers    Trigger[]
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  trigger     Trigger?
   actions     Action[]
   logs        Log[]
   isActive    Boolean   @default(true)
@@ -36,12 +33,13 @@ model Workflow {
   updatedAt   DateTime  @updatedAt
 }
 
+// One trigger per workflow (workflowId is unique).
 model Trigger {
   id          String    @id @default(cuid())
   type        String
   config      Json
-  workflowId  String
-  workflow    Workflow  @relation(fields: [workflowId], references: [id])
+  workflowId  String    @unique
+  workflow    Workflow  @relation(fields: [workflowId], references: [id], onDelete: Cascade)
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
 }
@@ -50,17 +48,25 @@ model Action {
   id          String    @id @default(cuid())
   type        String
   config      Json
+  // Execution order within a workflow (0-based).
+  order       Int       @default(0)
   workflowId  String
-  workflow    Workflow  @relation(fields: [workflowId], references: [id])
+  workflow    Workflow  @relation(fields: [workflowId], references: [id], onDelete: Cascade)
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
+
+  @@index([workflowId])
 }
 
 model Log {
   id          String    @id @default(cuid())
   workflowId  String
-  workflow    Workflow  @relation(fields: [workflowId], references: [id])
+  workflow    Workflow  @relation(fields: [workflowId], references: [id], onDelete: Cascade)
   status      String
   message     String?
+  triggerData Json?
+  resultData  Json?
   createdAt   DateTime  @default(now())
+
+  @@index([workflowId])
 }

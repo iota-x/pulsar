@@ -1,35 +1,14 @@
-import { Request, Response, NextFunction } from 'express';
+import { Response } from 'express';
 import * as logService from '../services/logService';
+import { asyncHandler } from '../middlewares/errorHandler';
+import { AuthedRequest } from '../middlewares/authMiddleware';
 
-export const createLog = async (req: Request, res: Response, next: NextFunction) => {
-    try {
-        const { workflowId, status, message } = req.body;
-        const log = await logService.createLog(workflowId, status, message);
+export const getAllLogs = asyncHandler(async (req: AuthedRequest, res: Response) => {
+  const logs = await logService.getAllLogs(req.userId!);
+  res.status(200).json(logs);
+});
 
-        res.status(201).json(log);
-    } catch (error) {
-        next(error);
-    }
-};
-
-export const getLogsByWorkflowId = async (req: Request, res: Response, next: NextFunction) => {
-    try {
-        const { workflowId } = req.params;
-        const logs = await logService.getLogsByWorkflowId(workflowId);
-
-        res.status(200).json(logs);
-    } catch (error) {
-        next(error);
-    }
-};
-
-export const getAllLogs = async (req: Request, res: Response, next: NextFunction) => {
-    try {
-        const { workflowId } = req.params;
-        const logs = await logService.getAllLogs(workflowId);
-
-        res.status(200).json(logs);
-    } catch (error) {
-        next(error);
-    }
-};
+export const getLogsByWorkflowId = asyncHandler(async (req: AuthedRequest, res: Response) => {
+  const logs = await logService.getLogsByWorkflowId(req.params.workflowId, req.userId!);
+  res.status(200).json(logs);
+});

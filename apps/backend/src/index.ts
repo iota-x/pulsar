@@ -1,63 +1,52 @@
 import express from 'express';
-import { registerUser, loginUser, getUserById } from './controllers/userController';
+import cors from 'cors';
+import { config } from './config';
+import { registerUser, loginUser, getMe } from './controllers/userController';
 import {
-    createWorkflow,
-    getAllWorkflows,
-    getWorkflowById,
-    updateWorkflow,
-    deleteWorkflow,
+  createWorkflow,
+  getAllWorkflows,
+  getWorkflowById,
+  updateWorkflow,
+  toggleWorkflow,
+  deleteWorkflow,
+  runWorkflow,
+  getDashboard,
 } from './controllers/workflowController';
-import {
-    createTrigger,
-    getAllTriggers,
-    updateTrigger,
-    deleteTrigger,
-} from './controllers/triggerController';
-import {
-    createAction,
-    getAllActions,
-    updateAction,
-    deleteAction,
-} from './controllers/actionController';
-import { createLog, getLogsByWorkflowId, getAllLogs } from './controllers/logController';
+import { getAllLogs, getLogsByWorkflowId } from './controllers/logController';
 import { errorHandler } from './middlewares/errorHandler';
-import { authMiddleware } from './middlewares/authMiddleware'; // Import the auth middleware
+import { authMiddleware } from './middlewares/authMiddleware';
 
 const app = express();
-app.use(express.json()); // For parsing JSON bodies
+app.use(cors({ origin: config.corsOrigin }));
+app.use(express.json());
 
-// Public Routes (No Auth Required)
-app.post('/users/register', registerUser);
-app.post('/users/login', loginUser);
+app.get('/health', (_req, res) => res.json({ status: 'ok' }));
 
-// Protected Routes (Auth Required)
-app.get('/users/:id', authMiddleware, getUserById);
+// --- Auth (public) ---
+app.post('/auth/register', registerUser);
+app.post('/auth/login', loginUser);
 
+// --- Auth (protected) ---
+app.get('/auth/me', authMiddleware, getMe);
+
+// --- Dashboard ---
+app.get('/dashboard', authMiddleware, getDashboard);
+
+// --- Workflows (trigger + actions managed inline) ---
 app.post('/workflows', authMiddleware, createWorkflow);
 app.get('/workflows', authMiddleware, getAllWorkflows);
 app.get('/workflows/:id', authMiddleware, getWorkflowById);
 app.put('/workflows/:id', authMiddleware, updateWorkflow);
+app.patch('/workflows/:id/active', authMiddleware, toggleWorkflow);
+app.post('/workflows/:id/run', authMiddleware, runWorkflow);
 app.delete('/workflows/:id', authMiddleware, deleteWorkflow);
 
-app.post('/triggers', authMiddleware, createTrigger);
-app.get('/triggers', authMiddleware, getAllTriggers);
-app.put('/triggers/:id', authMiddleware, updateTrigger);
-app.delete('/triggers/:id', authMiddleware, deleteTrigger);
-
-app.post('/actions', authMiddleware, createAction);
-app.get('/actions', authMiddleware, getAllActions);
-app.put('/actions/:id', authMiddleware, updateAction);
-app.delete('/actions/:id', authMiddleware, deleteAction);
-
-app.post('/logs', authMiddleware, createLog);
-app.get('/logs/:workflowId', authMiddleware, getLogsByWorkflowId);
+// --- Execution logs ---
 app.get('/logs', authMiddleware, getAllLogs);
+app.get('/logs/:workflowId', authMiddleware, getLogsByWorkflowId);
 
-// Global error handling middleware
 app.use(errorHandler);
 
-// Start the server
-const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => {
-    console.log(`Server is running on port ${PORT}`);
+app.listen(config.port, () => {
+  console.log(`🚀 Backend API running on http://localhost:${config.port}`);
 });

@@ -1,75 +1,59 @@
-import { Request, Response } from 'express';
+import { Response } from 'express';
 import * as workflowService from '../services/workflowService';
+import { asyncHandler, AppError } from '../middlewares/errorHandler';
+import { createWorkflowSchema, updateWorkflowSchema } from '../validation/schemas';
+import { AuthedRequest } from '../middlewares/authMiddleware';
+import { enqueueExecution } from '../lib/queue';
 
-export const createWorkflow = async (req: Request, res: Response) => {
-  try {
-    const workflow = await workflowService.createWorkflow(
-      req.body.userId,
-      req.body.name, 
-      req.body.description
-    );
-    res.status(201).json(workflow);
-  } catch (error) {
-    if (error instanceof Error) {
-      res.status(500).json({ message: error.message });
-    } else {
-      res.status(500).json({ message: "Unexpected error occurred" });
-    }
-  }
-};
+export const createWorkflow = asyncHandler(async (req: AuthedRequest, res: Response) => {
+  const input = createWorkflowSchema.parse(req.body);
+  const workflow = await workflowService.createWorkflow(req.userId!, input);
+  res.status(201).json(workflow);
+});
 
-export const getAllWorkflows = async (req: Request, res: Response) => {
-  try {
-    const workflows = await workflowService.getAllWorkflows(req.query.userId as string);
-    res.status(200).json(workflows);
-  } catch (error) {
-    if (error instanceof Error) {
-      res.status(500).json({ message: error.message });
-    } else {
-      res.status(500).json({ message: "Unexpected error occurred" });
-    }
-  }
-};
+export const getAllWorkflows = asyncHandler(async (req: AuthedRequest, res: Response) => {
+  const workflows = await workflowService.getAllWorkflows(req.userId!);
+  res.status(200).json(workflows);
+});
 
-export const getWorkflowById = async (req: Request, res: Response) => {
-  try {
-    const workflow = await workflowService.getWorkflowById(req.params.id);
-    res.status(200).json(workflow);
-  } catch (error) {
-    if (error instanceof Error) {
-      res.status(500).json({ message: error.message });
-    } else {
-      res.status(500).json({ message: "Unexpected error occurred" });
-    }
-  }
-};
+export const getWorkflowById = asyncHandler(async (req: AuthedRequest, res: Response) => {
+  const workflow = await workflowService.getWorkflowById(req.params.id, req.userId!);
+  res.status(200).json(workflow);
+});
 
-export const updateWorkflow = async (req: Request, res: Response) => {
-  try {
-    const workflow = await workflowService.updateWorkflow(
-      req.params.id, 
-      req.body.name, 
-      req.body.description 
-    );
-    res.status(200).json(workflow);
-  } catch (error) {
-    if (error instanceof Error) {
-      res.status(500).json({ message: error.message });
-    } else {
-      res.status(500).json({ message: "Unexpected error occurred" });
-    }
-  }
-};
+export const updateWorkflow = asyncHandler(async (req: AuthedRequest, res: Response) => {
+  const input = updateWorkflowSchema.parse(req.body);
+  const workflow = await workflowService.updateWorkflow(req.params.id, req.userId!, input);
+  res.status(200).json(workflow);
+});
 
-export const deleteWorkflow = async (req: Request, res: Response) => {
-  try {
-    await workflowService.deleteWorkflow(req.params.id);
-    res.status(204).json({ message: "Workflow deleted successfully" });
-  } catch (error) {
-    if (error instanceof Error) {
-      res.status(500).json({ message: error.message });
-    } else {
-      res.status(500).json({ message: "Unexpected error occurred" });
-    }
-  }
-};
+export const toggleWorkflow = asyncHandler(async (req: AuthedRequest, res: Response) => {
+  if (typeof req.body?.isActive !== 'boolean') throw new AppError('isActive (boolean) is required');
+  const workflow = await workflowService.setActive(req.params.id, req.userId!, req.body.isActive);
+  res.status(200).json(workflow);
+});
+
+export const deleteWorkflow = asyncHandler(async (req: AuthedRequest, res: Response) => {
+  await workflowService.deleteWorkflow(req.params.id, req.userId!);
+  res.status(204).send();
+});
+
+/** Manually enqueue a workflow run for testing, with synthetic trigger data. */
+export const runWorkflow = asyncHandler(async (req: AuthedRequest, res: Response) => {
+  const workflow = await workflowService.getWorkflowById(req.params.id, req.userId!);
+  if (!workflow) throw new AppError('Workflow not found', 404);
+  await enqueueExecution({
+    workflowId: workflow.id,
+    triggerData: {
+      triggerType: (workflow.trigger?.type as any) ?? 'transaction_confirmed',
+      manual: true,
+      ...(req.body?.triggerData ?? {}),
+    },
+  });
+  res.status(202).json({ message: 'Workflow execution enqueued' });
+});
+
+export const getDashboard = asyncHandler(async (req: AuthedRequest, res: Response) => {
+  const stats = await workflowService.getDashboardStats(req.userId!);
+  res.status(200).json(stats);
+});

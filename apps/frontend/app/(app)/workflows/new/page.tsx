@@ -1,0 +1,244 @@
+'use client';
+
+import { useState } from 'react';
+import { useRouter } from 'next/navigation';
+import { api } from '@/lib/api';
+import {
+  TRIGGER_CATALOG,
+  ACTION_CATALOG,
+  TRIGGER_BY_TYPE,
+  ACTION_BY_TYPE,
+  type TriggerType,
+  type ActionType,
+  type Implementation,
+} from '@/lib/types';
+import { TRIGGER_FIELDS, ACTION_FIELDS, type FieldDef } from '@/lib/fields';
+
+type Config = Record<string, string>;
+interface ActionDraft {
+  type: ActionType;
+  config: Config;
+}
+
+/** Small badge showing how a primitive is implemented. */
+function ImplBadge({ impl }: { impl: Implementation }) {
+  const map: Record<Implementation, [string, string]> = {
+    api: ['API Call', 'bg-sky-500/15 text-sky-400'],
+    smart_contract: ['Smart Contract', 'bg-amber-500/15 text-amber-400'],
+    hybrid: ['Hybrid', 'bg-fuchsia-500/15 text-fuchsia-400'],
+  };
+  const [label, cls] = map[impl];
+  return <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${cls}`}>{label}</span>;
+}
+
+/** Render the dynamic config inputs for a trigger/action type. */
+function ConfigFields({
+  fields,
+  config,
+  onChange,
+}: {
+  fields: FieldDef[];
+  config: Config;
+  onChange: (key: string, value: string) => void;
+}) {
+  if (fields.length === 0) return <p className="text-xs text-slate-500">No configuration needed.</p>;
+  return (
+    <div className="grid gap-3 sm:grid-cols-2">
+      {fields.map((f) => (
+        <div key={f.key}>
+          <label className="label">
+            {f.label} {f.required && <span className="text-rose-400">*</span>}
+          </label>
+          {f.type === 'select' ? (
+            <select
+              className="input"
+              value={config[f.key] ?? ''}
+              onChange={(e) => onChange(f.key, e.target.value)}
+            >
+              <option value="">— select —</option>
+              {f.options?.map((opt) => (
+                <option key={opt} value={opt}>
+                  {opt}
+                </option>
+              ))}
+            </select>
+          ) : (
+            <input
+              className="input"
+              type={f.type === 'number' ? 'number' : 'text'}
+              placeholder={f.placeholder}
+              value={config[f.key] ?? ''}
+              onChange={(e) => onChange(f.key, e.target.value)}
+            />
+          )}
+          {f.help && <p className="mt-1 text-xs text-slate-500">{f.help}</p>}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+export default function NewWorkflowPage() {
+  const router = useRouter();
+  const [name, setName] = useState('');
+  const [description, setDescription] = useState('');
+  const [triggerType, setTriggerType] = useState<TriggerType>('wallet_received_sol');
+  const [triggerConfig, setTriggerConfig] = useState<Config>({});
+  const [actions, setActions] = useState<ActionDraft[]>([
+    { type: 'send_discord_message', config: {} },
+  ]);
+  const [error, setError] = useState('');
+  const [saving, setSaving] = useState(false);
+
+  const setTriggerField = (key: string, value: string) =>
+    setTriggerConfig((c) => ({ ...c, [key]: value }));
+
+  const updateAction = (i: number, patch: Partial<ActionDraft>) =>
+    setActions((prev) => prev.map((a, idx) => (idx === i ? { ...a, ...patch } : a)));
+
+  const setActionField = (i: number, key: string, value: string) =>
+    setActions((prev) =>
+      prev.map((a, idx) => (idx === i ? { ...a, config: { ...a.config, [key]: value } } : a)),
+    );
+
+  const addAction = () => setActions((prev) => [...prev, { type: 'store_log', config: {} }]);
+  const removeAction = (i: number) => setActions((prev) => prev.filter((_, idx) => idx !== i));
+  const move = (i: number, dir: -1 | 1) =>
+    setActions((prev) => {
+      const next = [...prev];
+      const j = i + dir;
+      if (j < 0 || j >= next.length) return prev;
+      [next[i], next[j]] = [next[j], next[i]];
+      return next;
+    });
+
+  // Drop empty strings so optional fields aren't stored as "".
+  const clean = (c: Config) =>
+    Object.fromEntries(Object.entries(c).filter(([, v]) => v !== ''));
+
+  const save = async () => {
+    setError('');
+    if (!name.trim()) return setError('Workflow name is required');
+    setSaving(true);
+    try {
+      await api('/workflows', {
+        method: 'POST',
+        body: JSON.stringify({
+          name,
+          description: description || undefined,
+          trigger: { type: triggerType, config: clean(triggerConfig) },
+          actions: actions.map((a) => ({ type: a.type, config: clean(a.config) })),
+        }),
+      });
+      router.push('/workflows');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to save');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="space-y-6">
+      <h1 className="text-2xl font-bold">New workflow</h1>
+
+      {/* Metadata */}
+      <div className="card space-y-4">
+        <div>
+          <label className="label">Name</label>
+          <input className="input" value={name} onChange={(e) => setName(e.target.value)} placeholder="Whale wallet tracker" />
+        </div>
+        <div>
+          <label className="label">Description</label>
+          <input className="input" value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Optional" />
+        </div>
+      </div>
+
+      {/* Trigger */}
+      <div className="card space-y-4 border-l-4 border-l-brand">
+        <div className="flex items-center gap-2">
+          <span className="rounded bg-brand/20 px-2 py-0.5 text-xs font-medium text-brand">TRIGGER</span>
+          <h2 className="font-semibold">When this happens…</h2>
+          <ImplBadge impl={TRIGGER_BY_TYPE[triggerType].implementation} />
+        </div>
+        <select
+          className="input"
+          value={triggerType}
+          onChange={(e) => {
+            setTriggerType(e.target.value as TriggerType);
+            setTriggerConfig({});
+          }}
+        >
+          {TRIGGER_CATALOG.map((t) => (
+            <option key={t.type} value={t.type}>
+              {t.label}
+            </option>
+          ))}
+        </select>
+        <p className="text-xs text-slate-500">{TRIGGER_BY_TYPE[triggerType].description}</p>
+        <ConfigFields fields={TRIGGER_FIELDS[triggerType]} config={triggerConfig} onChange={setTriggerField} />
+      </div>
+
+      {/* Actions */}
+      <div className="space-y-4">
+        {actions.map((action, i) => (
+          <div key={i} className="card space-y-4 border-l-4 border-l-emerald-500">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <span className="rounded bg-emerald-500/20 px-2 py-0.5 text-xs font-medium text-emerald-400">
+                  ACTION {i + 1}
+                </span>
+                <h2 className="font-semibold">…do this</h2>
+                <ImplBadge impl={ACTION_BY_TYPE[action.type].implementation} />
+              </div>
+              <div className="flex gap-1 text-xs">
+                <button className="btn-ghost px-2 py-1" onClick={() => move(i, -1)} disabled={i === 0}>
+                  ↑
+                </button>
+                <button className="btn-ghost px-2 py-1" onClick={() => move(i, 1)} disabled={i === actions.length - 1}>
+                  ↓
+                </button>
+                {actions.length > 1 && (
+                  <button className="btn-ghost px-2 py-1 text-rose-400" onClick={() => removeAction(i)}>
+                    Remove
+                  </button>
+                )}
+              </div>
+            </div>
+            <select
+              className="input"
+              value={action.type}
+              onChange={(e) => updateAction(i, { type: e.target.value as ActionType, config: {} })}
+            >
+              {ACTION_CATALOG.map((t) => (
+                <option key={t.type} value={t.type}>
+                  {t.label}
+                </option>
+              ))}
+            </select>
+            <p className="text-xs text-slate-500">{ACTION_BY_TYPE[action.type].description}</p>
+            <ConfigFields
+              fields={ACTION_FIELDS[action.type]}
+              config={action.config}
+              onChange={(key, value) => setActionField(i, key, value)}
+            />
+          </div>
+        ))}
+        <button onClick={addAction} className="btn-ghost w-full border-dashed">
+          + Add action
+        </button>
+      </div>
+
+      {error && <p className="text-rose-400">{error}</p>}
+
+      <div className="flex gap-3">
+        <button onClick={save} className="btn-primary" disabled={saving}>
+          {saving ? 'Saving…' : 'Save workflow'}
+        </button>
+        <button onClick={() => router.back()} className="btn-ghost">
+          Cancel
+        </button>
+      </div>
+    </div>
+  );
+}

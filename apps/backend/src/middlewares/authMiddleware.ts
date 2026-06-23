@@ -1,10 +1,12 @@
 import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
+import { config } from '../config';
 
-// Secret key for JWT (should be stored in .env)
-const JWT_SECRET = process.env.JWT_SECRET || 'ankit';
+export interface AuthedRequest extends Request {
+  userId?: string;
+}
 
-export const authMiddleware = (req: Request, res: Response, next: NextFunction) => {
+export const authMiddleware = (req: AuthedRequest, res: Response, next: NextFunction) => {
   const token = req.header('Authorization')?.replace('Bearer ', '');
 
   if (!token) {
@@ -12,10 +14,10 @@ export const authMiddleware = (req: Request, res: Response, next: NextFunction) 
   }
 
   try {
-    const decoded = jwt.verify(token, JWT_SECRET);
-    (req as any).user = decoded;
+    const decoded = jwt.verify(token, config.jwtSecret) as { userId: string };
+    req.userId = decoded.userId;
     next();
-  } catch (err) {
+  } catch {
     res.status(401).json({ error: 'Token is not valid' });
   }
 };
