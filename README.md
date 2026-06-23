@@ -1,4 +1,4 @@
-# ⚡ Web3 Zapier
+# ⚡ Pulsar a Web3 Zapier
 
 Automation workflows for the Solana ecosystem — **IF this happens on-chain → THEN do this.**
 
