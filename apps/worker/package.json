@@ -11,6 +11,7 @@
   },
   "license": "ISC",
   "dependencies": {
+    "@certusone/wormhole-sdk": "^0.10.18",
     "@prisma/client": "^5.18.0",
     "@raydium-io/raydium-sdk-v2": "^0.2.53-alpha",
     "@solana/spl-token": "^0.4.8",

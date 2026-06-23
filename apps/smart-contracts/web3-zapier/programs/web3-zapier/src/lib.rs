@@ -45,6 +45,50 @@ pub mod web3_zapier {
         });
         Ok(())
     }
+
+    // --- Governance -------------------------------------------------------
+
+    /// Create a governance proposal (PDA per authority + id).
+    pub fn create_proposal(ctx: Context<CreateProposal>, id: String, description: String) -> Result<()> {
+        require!(id.as_bytes().len() <= MAX_KEY_LEN, FeedError::KeyTooLong);
+        require!(description.as_bytes().len() <= MAX_VALUE_LEN, FeedError::ValueTooLong);
+
+        let p = &mut ctx.accounts.proposal;
+        p.authority = ctx.accounts.authority.key();
+        p.id = id.clone();
+        p.description = description;
+        p.yes_votes = 0;
+        p.no_votes = 0;
+        p.executed = false;
+        p.created_at = Clock::get()?.unix_timestamp;
+        p.bump = ctx.bumps.proposal;
+
+        emit!(ProposalCreated { authority: p.authority, id });
+        Ok(())
+    }
+
+    /// Cast a vote on a proposal (approve = yes, otherwise no).
+    pub fn cast_vote(ctx: Context<CastVote>, approve: bool) -> Result<()> {
+        let p = &mut ctx.accounts.proposal;
+        require!(!p.executed, GovError::AlreadyExecuted);
+        if approve {
+            p.yes_votes = p.yes_votes.checked_add(1).unwrap();
+        } else {
+            p.no_votes = p.no_votes.checked_add(1).unwrap();
+        }
+        emit!(VoteCast { voter: ctx.accounts.voter.key(), approve, yes_votes: p.yes_votes, no_votes: p.no_votes });
+        Ok(())
+    }
+
+    /// Execute a passed proposal (yes > no). Only the proposal authority may execute.
+    pub fn execute_proposal(ctx: Context<ExecuteProposal>) -> Result<()> {
+        let p = &mut ctx.accounts.proposal;
+        require!(!p.executed, GovError::AlreadyExecuted);
+        require!(p.yes_votes > p.no_votes, GovError::NotPassed);
+        p.executed = true;
+        emit!(ProposalExecuted { authority: p.authority, id: p.id.clone(), yes_votes: p.yes_votes, no_votes: p.no_votes });
+        Ok(())
+    }
 }
 
 const MAX_KEY_LEN: usize = 32;
@@ -86,6 +130,53 @@ pub struct Ping<'info> {
     pub signer: Signer<'info>,
 }
 
+#[account]
+pub struct Proposal {
+    pub authority: Pubkey,
+    pub id: String,
+    pub description: String,
+    pub yes_votes: u64,
+    pub no_votes: u64,
+    pub executed: bool,
+    pub created_at: i64,
+    pub bump: u8,
+}
+
+impl Proposal {
+    pub const SPACE: usize =
+        8 + 32 + (4 + MAX_KEY_LEN) + (4 + MAX_VALUE_LEN) + 8 + 8 + 1 + 8 + 1;
+}
+
+#[derive(Accounts)]
+#[instruction(id: String)]
+pub struct CreateProposal<'info> {
+    #[account(
+        init,
+        payer = authority,
+        space = Proposal::SPACE,
+        seeds = [b"proposal", authority.key().as_ref(), id.as_bytes()],
+        bump
+    )]
+    pub proposal: Account<'info, Proposal>,
+    #[account(mut)]
+    pub authority: Signer<'info>,
+    pub system_program: Program<'info, System>,
+}
+
+#[derive(Accounts)]
+pub struct CastVote<'info> {
+    #[account(mut)]
+    pub proposal: Account<'info, Proposal>,
+    pub voter: Signer<'info>,
+}
+
+#[derive(Accounts)]
+pub struct ExecuteProposal<'info> {
+    #[account(mut, has_one = authority)]
+    pub proposal: Account<'info, Proposal>,
+    pub authority: Signer<'info>,
+}
+
 #[event]
 pub struct DataUpdated {
     pub authority: Pubkey,
@@ -102,10 +193,40 @@ pub struct Triggered {
     pub timestamp: i64,
 }
 
+#[event]
+pub struct ProposalCreated {
+    pub authority: Pubkey,
+    pub id: String,
+}
+
+#[event]
+pub struct VoteCast {
+    pub voter: Pubkey,
+    pub approve: bool,
+    pub yes_votes: u64,
+    pub no_votes: u64,
+}
+
+#[event]
+pub struct ProposalExecuted {
+    pub authority: Pubkey,
+    pub id: String,
+    pub yes_votes: u64,
+    pub no_votes: u64,
+}
+
 #[error_code]
 pub enum FeedError {
     #[msg("Key exceeds 32 bytes")]
     KeyTooLong,
     #[msg("Value exceeds maximum length")]
     ValueTooLong,
+}
+
+#[error_code]
+pub enum GovError {
+    #[msg("Proposal already executed")]
+    AlreadyExecuted,
+    #[msg("Proposal has not passed (yes must exceed no)")]
+    NotPassed,
 }

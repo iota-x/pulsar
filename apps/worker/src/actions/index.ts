@@ -17,6 +17,8 @@ import { updateOracleData } from './updateOracleData';
 import { updateContractState } from './updateContractState';
 import { triggerSmartContract } from './triggerSmartContract';
 import { createLiquidityPool } from './createLiquidityPool';
+import { executeGovernanceAction } from './executeGovernanceAction';
+import { triggerCrossChainTx } from './triggerCrossChainTx';
 
 /**
  * Handlers for action types that run fully off-chain today. Action types absent
@@ -42,4 +44,6 @@ export const actionHandlers: Partial<Record<ActionType, ActionHandler>> = {
   update_contract_state: updateContractState,
   trigger_smart_contract: triggerSmartContract,
   create_liquidity_pool: createLiquidityPool,
+  execute_governance_action: executeGovernanceAction,
+  trigger_cross_chain_tx: triggerCrossChainTx,
 };

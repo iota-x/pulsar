@@ -26,6 +26,11 @@ function borshString(value: string): Buffer {
   return Buffer.concat([len, bytes]);
 }
 
+/** Borsh-encode a bool as a single byte. */
+function borshBool(value: boolean): Buffer {
+  return Buffer.from([value ? 1 : 0]);
+}
+
 function requireSigner() {
   const signer = getSigner();
   if (!signer) throw new Error('no signer configured (set SOLANA_SIGNER_SECRET_KEY)');
@@ -71,4 +76,58 @@ export async function callPing(label: string): Promise<string> {
   });
   const sig = await sendAndConfirmTransaction(connection, new Transaction().add(ix), [signer]);
   return explorerUrl(sig);
+}
+
+/**
+ * Run a full governance cycle for a uniquely-id'd proposal: create_proposal →
+ * cast_vote(approve) → execute_proposal. Returns the proposal PDA and the
+ * explorer URL of the execution transaction.
+ */
+export async function callGovernanceCycle(
+  id: string,
+  description: string,
+): Promise<{ proposal: string; executeUrl: string }> {
+  const signer = requireSigner();
+  const seedId = id.slice(0, 32);
+
+  const [proposal] = PublicKey.findProgramAddressSync(
+    [Buffer.from('proposal'), signer.publicKey.toBuffer(), Buffer.from(seedId, 'utf8')],
+    PROGRAM_ID,
+  );
+
+  // 1. create_proposal(id, description)
+  const createIx = new TransactionInstruction({
+    programId: PROGRAM_ID,
+    keys: [
+      { pubkey: proposal, isSigner: false, isWritable: true },
+      { pubkey: signer.publicKey, isSigner: true, isWritable: true },
+      { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
+    ],
+    data: Buffer.concat([discriminator('create_proposal'), borshString(seedId), borshString(description)]),
+  });
+  await sendAndConfirmTransaction(connection, new Transaction().add(createIx), [signer]);
+
+  // 2. cast_vote(true)
+  const voteIx = new TransactionInstruction({
+    programId: PROGRAM_ID,
+    keys: [
+      { pubkey: proposal, isSigner: false, isWritable: true },
+      { pubkey: signer.publicKey, isSigner: true, isWritable: false },
+    ],
+    data: Buffer.concat([discriminator('cast_vote'), borshBool(true)]),
+  });
+  await sendAndConfirmTransaction(connection, new Transaction().add(voteIx), [signer]);
+
+  // 3. execute_proposal()
+  const execIx = new TransactionInstruction({
+    programId: PROGRAM_ID,
+    keys: [
+      { pubkey: proposal, isSigner: false, isWritable: true },
+      { pubkey: signer.publicKey, isSigner: true, isWritable: false },
+    ],
+    data: discriminator('execute_proposal'),
+  });
+  const sig = await sendAndConfirmTransaction(connection, new Transaction().add(execIx), [signer]);
+
+  return { proposal: proposal.toBase58(), executeUrl: explorerUrl(sig) };
 }

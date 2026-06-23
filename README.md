@@ -112,17 +112,20 @@ What runs for real today vs. simulated:
 
   Backed by our **deployed Anchor program** (`apps/smart-contracts`, program id
   `3UDvaK5Xxa7JsGUF3peRzbgspk5ASUQxCQEfhibj7Rjs` on devnet): `update_oracle_data` and
-  `update_contract_state` write a value to an on-chain data-feed PDA (`update_data` instruction);
-  `trigger_smart_contract` emits an on-chain `Triggered` event (`ping` instruction). The worker
-  builds these instructions directly (8-byte discriminator + Borsh args) — see
+  `update_contract_state` write a value to an on-chain data-feed PDA (`update_data`);
+  `trigger_smart_contract` emits a `Triggered` event (`ping`); and `execute_governance_action`
+  runs a full on-chain proposal lifecycle (`create_proposal` → `cast_vote` → `execute_proposal`).
+  The worker builds these instructions directly (8-byte discriminator + Borsh args) — see
   `apps/worker/src/anchorProgram.ts`.
 
-  `create_liquidity_pool` is also real: it creates a **Raydium CPMM pool** from two tokens
-  (tokenB defaults to wrapped SOL) via `@raydium-io/raydium-sdk-v2`, using the devnet CPMM program
-  on devnet and the mainnet program otherwise — see `apps/worker/src/actions/createLiquidityPool.ts`.
+  `create_liquidity_pool` creates a **Raydium CPMM pool** from two tokens (tokenB defaults to wrapped
+  SOL) via `@raydium-io/raydium-sdk-v2`. `trigger_cross_chain_tx` publishes a **Wormhole** Core-Bridge
+  message from Solana (the guardians produce a VAA redeemable on the destination chain) — see
+  `apps/worker/src/wormhole.ts`.
 
-  Still `simulated` because they need heavyweight external integrations: `trigger_cross_chain_tx`
-  (Wormhole + a destination chain) and the remaining governance / contract-deploy actions.
+  Still `simulated` (each is a thin variant of an existing real action, or needs a separate program):
+  `reward_user_tokens` / `allocate_funds` (token transfers), `initiate_custom_action`,
+  `send_alert_and_rollback`, and `deploy_contract`.
 
 Adding a real handler is one file + one registry line in `apps/worker/src/actions/`.
 
@@ -158,9 +161,10 @@ npm run mint:create            # 2. create a test SPL mint (prints a mint addres
 ## On-chain program (Anchor)
 
 `apps/smart-contracts/web3-zapier` is a real Anchor program, deployed to devnet at
-`3UDvaK5Xxa7JsGUF3peRzbgspk5ASUQxCQEfhibj7Rjs`. It backs `update_oracle_data`,
-`update_contract_state` (the `update_data` instruction → a per-authority key/value PDA) and
-`trigger_smart_contract` (the `ping` instruction → a `Triggered` event).
+`3UDvaK5Xxa7JsGUF3peRzbgspk5ASUQxCQEfhibj7Rjs`. Instructions: `update_data` (a per-authority
+key/value PDA → `update_oracle_data` / `update_contract_state`), `ping` (a `Triggered` event →
+`trigger_smart_contract`), and governance — `create_proposal` / `cast_vote` / `execute_proposal`
+(→ `execute_governance_action`).
 
 Build & deploy (toolchain: rustc, solana-cli ≥1.18.26, `cargo-build-sbf`):
 
