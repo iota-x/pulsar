@@ -25,9 +25,20 @@ const PROGRAM_SUCCESS_TYPES = new Set([
   'contract_event_emitted', 'specific_contract_interaction', 'user_interacts_with_dapp', 'governance_vote_triggered',
 ]);
 const ACCOUNT_TYPES = new Set(['liquidity_pool_balance_changed', 'staking_rewards_earned', 'token_vesting_release']);
+// token_swap_executed is wallet-scoped (detected from the wallet's DEX tx logs).
+WALLET_TYPES.add('token_swap_executed');
+
+// Trigger types detected by watching a fixed well-known program's logs.
+const FIXED_PROGRAMS: Record<string, string> = {
+  nft_minted: 'metaqbxxUerdq28cj1RbAWkYQm3ybzjb6a8bt518x1s', // Metaplex Token Metadata
+  new_token_listing: process.env.RAYDIUM_CPMM_PROGRAM ?? 'DRaycpLY18LhpbydsBWbVJtxpNv9oXPgjRSfpF2bWpYb', // Raydium CPMM devnet
+  cross_chain_token_transfer: process.env.WORMHOLE_CORE_BRIDGE ?? '3u8hJUVTA4jH1wYAyUur7FFZVQ8H635K3tSHHF4ssjQ5',
+};
 
 /** Resolve the on-chain target string a trigger should subscribe to. */
 function targetFor(type: string, c: TriggerConfig): string | null {
+  if (FIXED_PROGRAMS[type]) return FIXED_PROGRAMS[type];
+  if (type === 'nft_transferred') return (c.mint as string) ?? null;
   if (WALLET_TYPES.has(type)) return c.wallet ?? null;
   if (PROGRAM_TYPES.has(type)) return (c.programId as string) ?? null;
   if (type === 'liquidity_pool_balance_changed') return (c.poolAddress as string) ?? null;
@@ -53,6 +64,8 @@ async function loadSubscriptions() {
   const wallets = new Set<string>();
   const programs = new Set<string>();
   const accounts = new Set<string>();
+  const fixedPrograms = new Map<string, string>();
+  const mints = new Set<string>();
   const prices: Subscription[] = [];
   const scheduledIds = new Set<string>();
   let slots = false;
@@ -79,6 +92,8 @@ async function loadSubscriptions() {
     next.set(target, list);
 
     if (target === 'slot') slots = true;
+    else if (FIXED_PROGRAMS[t.type]) fixedPrograms.set(target, t.type);
+    else if (t.type === 'nft_transferred') mints.add(target);
     else if (WALLET_TYPES.has(t.type)) wallets.add(target);
     else if (PROGRAM_TYPES.has(t.type)) programs.add(target);
     else if (ACCOUNT_TYPES.has(t.type)) accounts.add(target);
@@ -93,7 +108,7 @@ async function loadSubscriptions() {
 
   index = next;
   priceWatches = prices;
-  return { wallets, programs, accounts, slots };
+  return { wallets, programs, accounts, slots, fixedPrograms, mints };
 }
 
 function ensureScheduleTimer(workflowId: string, intervalSeconds: number) {
@@ -113,6 +128,10 @@ function ensureScheduleTimer(workflowId: string, intervalSeconds: number) {
 /** Does a detected event (carrying a `kind`) satisfy a subscription? */
 function matchSub(sub: Subscription, data: DetectedEvent['data']): boolean {
   switch (data.kind) {
+    case 'fixed': // fixed-program event (nft_minted / new_token_listing / cross_chain_token_transfer)
+      return sub.triggerType === data.triggerType;
+    case 'mint': // nft_transferred for a specific mint (target already scopes the mint)
+      return sub.triggerType === 'nft_transferred';
     case 'program_success':
       return PROGRAM_SUCCESS_TYPES.has(sub.triggerType);
     case 'program_failed':

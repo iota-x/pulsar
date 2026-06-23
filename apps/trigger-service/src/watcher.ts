@@ -10,7 +10,28 @@ export interface SyncTargets {
   programs: Set<string>;
   accounts: Set<string>;
   slots: boolean;
+  /** Fixed well-known programs → the specific trigger type they emit. */
+  fixedPrograms: Map<string, string>;
+  /** SPL mints to watch for transfers (nft_transferred). */
+  mints: Set<string>;
 }
+
+// DEX program ids whose presence in a wallet's tx logs implies a swap.
+const DEX_PROGRAMS = [
+  'JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4', // Jupiter v6
+  '675kPX9MHTjS2zt1qfr1NYHuzeLXfQM9H24wFSUt1Mp8', // Raydium AMM v4
+  'DRaycpLY18LhpbydsBWbVJtxpNv9oXPgjRSfpF2bWpYb', // Raydium CPMM (devnet)
+  'CPMMoo8L3F4NbTegBCKVNunggL7H1ZpdTHKxQB5qKP1C', // Raydium CPMM (mainnet)
+  'whirLbMiicVdio4qvUfM5KAg6Ct8VwpYzGff3uctyCc', // Orca Whirlpool
+];
+
+// Per-trigger-type filter on a program's log lines (reduces noise). Kept
+// lenient — these programs' main user instruction is the event we care about.
+const FIXED_LOG_FILTER: Record<string, (logs: string[]) => boolean> = {
+  nft_minted: (l) => l.some((x) => /Create|Mint/i.test(x)),
+  new_token_listing: (l) => l.some((x) => /Initialize/i.test(x)),
+  cross_chain_token_transfer: (l) => l.some((x) => /Sequence|PostMessage/i.test(x)),
+};
 
 /**
  * Manages Solana websocket subscriptions for a changing set of targets:
@@ -31,6 +52,8 @@ export class SolanaWatcher {
   private tokenSubs = new Map<string, number>(); // wallet → token program-account
   private programSubs = new Map<string, number>(); // programId → onLogs
   private dataSubs = new Map<string, number>(); // account → onAccountChange
+  private fixedSubs = new Map<string, number>(); // fixed program → onLogs
+  private mintSubs = new Map<string, number>(); // mint → token-account onProgramAccountChange
   private slotSub: number | null = null;
 
   private lastLamports = new Map<string, number>();
@@ -47,6 +70,13 @@ export class SolanaWatcher {
     await this.reconcile(this.accountSubs, t.wallets, (w) => this.subscribeWallet(w), (w) => this.unsubscribeWallet(w));
     await this.reconcile(this.programSubs, t.programs, (p) => this.subscribeProgram(p), (p) => this.unsubscribeProgram(p));
     await this.reconcile(this.dataSubs, t.accounts, (a) => this.subscribeAccount(a), (a) => this.unsubscribeAccount(a));
+    await this.reconcile(
+      this.fixedSubs,
+      new Set(t.fixedPrograms.keys()),
+      (p) => this.subscribeFixedProgram(p, t.fixedPrograms.get(p)!),
+      (p) => this.unsubscribeFixedProgram(p),
+    );
+    await this.reconcile(this.mintSubs, t.mints, (m) => this.subscribeMint(m), (m) => this.unsubscribeMint(m));
 
     if (t.slots && this.slotSub === null) {
       this.slotSub = this.connection.onSlotChange(({ slot }) =>
@@ -103,6 +133,10 @@ export class SolanaWatcher {
     const logSub = this.connection.onLogs(pubkey, (logs) => {
       if (logs.err) return;
       this.onEvent({ target: wallet, data: { triggerType: 'transaction_confirmed', kind: 'wallet', wallet, signature: logs.signature } });
+      // A swap if any line references a known DEX program.
+      if (logs.logs.some((line) => DEX_PROGRAMS.some((p) => line.includes(p)))) {
+        this.onEvent({ target: wallet, data: { triggerType: 'token_swap_executed', kind: 'wallet', wallet, signature: logs.signature } });
+      }
     });
 
     await this.subscribeTokens(wallet, pubkey);
@@ -226,6 +260,60 @@ export class SolanaWatcher {
     if (s !== undefined) await this.connection.removeOnLogsListener(s);
     this.programSubs.delete(programId);
     console.log(`[watcher] unsubscribed program ${programId}`);
+  }
+
+  // --- Fixed well-known programs (Metaplex / Raydium / Wormhole) ---------
+
+  private async subscribeFixedProgram(programId: string, triggerType: string): Promise<void> {
+    let pubkey: PublicKey;
+    try {
+      pubkey = new PublicKey(programId);
+    } catch {
+      return;
+    }
+    const filter = FIXED_LOG_FILTER[triggerType];
+    const sub = this.connection.onLogs(pubkey, (logs) => {
+      if (logs.err) return;
+      if (filter && !filter(logs.logs)) return;
+      this.onEvent({
+        target: programId,
+        data: { triggerType: triggerType as TriggerData['triggerType'], kind: 'fixed', signature: logs.signature },
+      });
+    });
+    this.fixedSubs.set(programId, sub);
+    console.log(`[watcher] subscribed fixed program ${programId} (${triggerType})`);
+  }
+
+  private async unsubscribeFixedProgram(programId: string): Promise<void> {
+    const s = this.fixedSubs.get(programId);
+    if (s !== undefined) await this.connection.removeOnLogsListener(s);
+    this.fixedSubs.delete(programId);
+  }
+
+  // --- Mints (NFT transfers) --------------------------------------------
+
+  private async subscribeMint(mint: string): Promise<void> {
+    let mintKey: PublicKey;
+    try {
+      mintKey = new PublicKey(mint);
+    } catch {
+      return;
+    }
+    // Watch token accounts of this mint (memcmp at offset 0 = mint) for changes.
+    const sub = this.connection.onProgramAccountChange(
+      TOKEN_PROGRAM_ID,
+      () => this.onEvent({ target: mint, data: { triggerType: 'nft_transferred', kind: 'mint', mint } }),
+      'confirmed',
+      [{ dataSize: 165 }, { memcmp: { offset: 0, bytes: mintKey.toBase58() } }],
+    );
+    this.mintSubs.set(mint, sub);
+    console.log(`[watcher] subscribed mint ${mint} (nft_transferred)`);
+  }
+
+  private async unsubscribeMint(mint: string): Promise<void> {
+    const s = this.mintSubs.get(mint);
+    if (s !== undefined) await this.connection.removeProgramAccountChangeListener(s);
+    this.mintSubs.delete(mint);
   }
 
   // --- Accounts ---------------------------------------------------------

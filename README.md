@@ -96,20 +96,24 @@ governance, deploy, oracle update, cross-chain, …).
 
 What runs for real today vs. simulated:
 
-- **Triggers detected live** over raw RPC websockets (no API key) — 18 of 23:
+- **All 23 triggers are wired** and detected over raw RPC websockets (no API key):
   - *wallet* (`config.wallet`): `wallet_received_sol`, `wallet_received_token`, `wallet_received_nft`,
     `airdrop_detected`, `transaction_confirmed`, `wallet_balance_below_threshold`,
-    `wallet_funded_by_address` (resolves the sender).
+    `wallet_funded_by_address` (resolves the sender), `token_swap_executed` (DEX program seen in the
+    wallet's tx logs).
   - *program logs* (`config.programId`): `contract_event_emitted`, `contract_execution_failed`,
     `specific_contract_interaction`, `user_interacts_with_dapp`, `governance_vote_triggered`.
-  - *account changes*: `liquidity_pool_balance_changed` (poolAddress), `staking_rewards_earned`
-    (stakeAccount), `token_vesting_release` (vestingAccount).
+  - *fixed programs*: `nft_minted` (Metaplex Token Metadata), `new_token_listing` (Raydium CPMM),
+    `cross_chain_token_transfer` (Wormhole Core Bridge).
+  - *account / mint changes*: `liquidity_pool_balance_changed` (poolAddress), `staking_rewards_earned`
+    (stakeAccount), `token_vesting_release` (vestingAccount), `nft_transferred` (a mint's token
+    accounts).
   - *other*: `new_block_mined` (slot subscription), `scheduled_time` (interval timer),
     `token_price_threshold` (Jupiter price poll).
 
-  The 5 not yet live need richer indexing (Metaplex / DEX / bridge): `nft_minted`, `nft_transferred`,
-  `token_swap_executed`, `new_token_listing`, `cross_chain_token_transfer` — extension points in
-  `apps/trigger-service/src/watcher.ts`.
+  A few only fire under specific real conditions that are hard to reproduce on devnet: `nft_minted`
+  needs a Metaplex-metadata mint, `token_swap_executed` needs devnet DEX liquidity. The detection
+  mechanisms are identical to the proven ones.
 - **Actions executed for real**: `send_webhook`, `send_discord_message`, `send_email`,
   `send_notification`, `record_transaction_db`, `fetch_latest_transactions`, `store_log`, the
   **on-chain SPL actions** `send_tokens` (native SOL or SPL), `mint_tokens`, `burn_tokens`,
