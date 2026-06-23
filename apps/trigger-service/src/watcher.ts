@@ -2,33 +2,39 @@ import { Connection, PublicKey } from '@solana/web3.js';
 import { TOKEN_PROGRAM_ID, unpackAccount, getMint } from '@solana/spl-token';
 import type { TriggerData } from '@web3-zapier/shared';
 
-export type DetectedEvent = { wallet: string; data: TriggerData };
+export type DetectedEvent = { target: string; data: TriggerData & { kind: string } };
 type EventHandler = (event: DetectedEvent) => void;
 
+export interface SyncTargets {
+  wallets: Set<string>;
+  programs: Set<string>;
+  accounts: Set<string>;
+  slots: boolean;
+}
+
 /**
- * Manages Solana websocket subscriptions for a changing set of wallets.
+ * Manages Solana websocket subscriptions for a changing set of targets:
+ *   - wallets  → SOL receipts, balance, confirmed txns, token/NFT receipts, funder
+ *   - programs → program-log activity (success / failure)
+ *   - accounts → account data changes (pool / stake / vesting balances)
+ *   - slots    → new blocks
  *
- * For each watched wallet it subscribes to:
- *   - account changes        → incoming SOL (wallet_received_sol) + balance snapshot
- *   - transaction logs        → confirmed transactions (transaction_confirmed)
- *   - SPL token program accts → incoming tokens / NFTs (wallet_received_token,
- *                               wallet_received_nft, airdrop_detected)
- *
- * The token subscription filters the Token program to accounts whose owner is
- * the watched wallet, so any balance increase on one of its token accounts is
- * detected as a receipt.
+ * Detection (here) is separated from matching (index.ts): events carry a `kind`
+ * the matcher maps to the configured trigger types.
  */
 export class SolanaWatcher {
   private connection: Connection;
   private onEvent: EventHandler;
 
-  private accountSubs = new Map<string, number>();
-  private logSubs = new Map<string, number>();
-  private tokenSubs = new Map<string, number>();
+  private accountSubs = new Map<string, number>(); // wallet → SOL onAccountChange
+  private logSubs = new Map<string, number>(); // wallet → onLogs
+  private tokenSubs = new Map<string, number>(); // wallet → token program-account
+  private programSubs = new Map<string, number>(); // programId → onLogs
+  private dataSubs = new Map<string, number>(); // account → onAccountChange
+  private slotSub: number | null = null;
+
   private lastLamports = new Map<string, number>();
-  // Per token-account (base58) → last observed raw amount.
   private lastTokenAmount = new Map<string, bigint>();
-  // Mint (base58) → decimals, cached to classify NFTs (decimals === 0).
   private mintDecimals = new Map<string, number>();
 
   constructor(rpcUrl: string, wsUrl: string, onEvent: EventHandler) {
@@ -36,26 +42,45 @@ export class SolanaWatcher {
     this.onEvent = onEvent;
   }
 
-  /** Reconcile live subscriptions with the desired set of wallet addresses. */
-  async sync(wallets: Set<string>): Promise<void> {
-    for (const wallet of wallets) {
-      if (!this.accountSubs.has(wallet)) await this.subscribe(wallet);
-    }
-    for (const wallet of [...this.accountSubs.keys()]) {
-      if (!wallets.has(wallet)) await this.unsubscribe(wallet);
+  /** Reconcile all live subscriptions with the desired target sets. */
+  async sync(t: SyncTargets): Promise<void> {
+    await this.reconcile(this.accountSubs, t.wallets, (w) => this.subscribeWallet(w), (w) => this.unsubscribeWallet(w));
+    await this.reconcile(this.programSubs, t.programs, (p) => this.subscribeProgram(p), (p) => this.unsubscribeProgram(p));
+    await this.reconcile(this.dataSubs, t.accounts, (a) => this.subscribeAccount(a), (a) => this.unsubscribeAccount(a));
+
+    if (t.slots && this.slotSub === null) {
+      this.slotSub = this.connection.onSlotChange(({ slot }) =>
+        this.onEvent({ target: 'slot', data: { triggerType: 'new_block_mined', kind: 'slot', slot } }),
+      );
+      console.log('[watcher] subscribed to slots');
+    } else if (!t.slots && this.slotSub !== null) {
+      await this.connection.removeSlotChangeListener(this.slotSub);
+      this.slotSub = null;
+      console.log('[watcher] unsubscribed from slots');
     }
   }
 
-  private async subscribe(wallet: string): Promise<void> {
+  private async reconcile(
+    live: Map<string, number>,
+    desired: Set<string>,
+    add: (k: string) => Promise<void>,
+    remove: (k: string) => Promise<void>,
+  ) {
+    for (const k of desired) if (!live.has(k)) await add(k);
+    for (const k of [...live.keys()]) if (!desired.has(k)) await remove(k);
+  }
+
+  // --- Wallets ----------------------------------------------------------
+
+  private async subscribeWallet(wallet: string): Promise<void> {
     let pubkey: PublicKey;
     try {
       pubkey = new PublicKey(wallet);
     } catch {
-      console.warn(`[watcher] invalid wallet address, skipping: ${wallet}`);
+      console.warn(`[watcher] invalid wallet, skipping: ${wallet}`);
       return;
     }
 
-    // Seed the current balance so the first change reports an accurate delta.
     try {
       this.lastLamports.set(wallet, await this.connection.getBalance(pubkey));
     } catch {
@@ -69,91 +94,81 @@ export class SolanaWatcher {
       this.lastLamports.set(wallet, info.lamports);
 
       if (delta > 0) {
-        this.onEvent({
-          wallet,
-          data: { triggerType: 'wallet_received_sol', wallet, amount: delta / 1e9, balanceSol },
-        });
+        this.onEvent({ target: wallet, data: { triggerType: 'wallet_received_sol', kind: 'wallet', wallet, amount: delta / 1e9, balanceSol } });
+        void this.lookupFunder(wallet, delta / 1e9);
       }
-      this.onEvent({
-        wallet,
-        data: { triggerType: 'wallet_balance_below_threshold', wallet, balanceSol },
-      });
+      this.onEvent({ target: wallet, data: { triggerType: 'wallet_balance_below_threshold', kind: 'wallet', wallet, balanceSol } });
     });
 
     const logSub = this.connection.onLogs(pubkey, (logs) => {
-      if (logs.err) return; // only confirmed/successful transactions
-      this.onEvent({
-        wallet,
-        data: { triggerType: 'transaction_confirmed', wallet, signature: logs.signature },
-      });
+      if (logs.err) return;
+      this.onEvent({ target: wallet, data: { triggerType: 'transaction_confirmed', kind: 'wallet', wallet, signature: logs.signature } });
     });
 
     await this.subscribeTokens(wallet, pubkey);
-
     this.accountSubs.set(wallet, accountSub);
     this.logSubs.set(wallet, logSub);
-    console.log(`[watcher] subscribed to ${wallet}`);
+    console.log(`[watcher] subscribed wallet ${wallet}`);
   }
 
-  /** Watch the wallet's SPL token accounts for incoming tokens / NFTs. */
-  private async subscribeTokens(wallet: string, pubkey: PublicKey): Promise<void> {
-    // Seed existing token-account balances so a later change yields a real delta.
+  /** On a SOL receipt, resolve the sender so wallet_funded_by_address can match. */
+  private async lookupFunder(wallet: string, amount: number): Promise<void> {
     try {
-      const existing = await this.connection.getTokenAccountsByOwner(pubkey, {
-        programId: TOKEN_PROGRAM_ID,
-      });
+      const sigs = await this.connection.getSignaturesForAddress(new PublicKey(wallet), { limit: 1 });
+      if (!sigs.length) return;
+      const tx = await this.connection.getParsedTransaction(sigs[0].signature, { maxSupportedTransactionVersion: 0 });
+      const keys = tx?.transaction.message.accountKeys ?? [];
+      const signer = keys.find((k) => k.signer)?.pubkey.toBase58();
+      if (signer && signer !== wallet) {
+        this.onEvent({ target: wallet, data: { triggerType: 'wallet_funded_by_address', kind: 'wallet', wallet, amount, fromAddress: signer } });
+      }
+    } catch {
+      /* best-effort */
+    }
+  }
+
+  private async subscribeTokens(wallet: string, pubkey: PublicKey): Promise<void> {
+    try {
+      const existing = await this.connection.getTokenAccountsByOwner(pubkey, { programId: TOKEN_PROGRAM_ID });
       for (const { pubkey: acct, account } of existing.value) {
-        const parsed = unpackAccount(acct, account, TOKEN_PROGRAM_ID);
-        this.lastTokenAmount.set(acct.toBase58(), parsed.amount);
+        this.lastTokenAmount.set(acct.toBase58(), unpackAccount(acct, account, TOKEN_PROGRAM_ID).amount);
       }
     } catch (err) {
-      console.warn(`[watcher] could not seed token accounts for ${wallet}:`, err);
+      console.warn(`[watcher] token seed failed for ${wallet}:`, err);
     }
 
     const tokenSub = this.connection.onProgramAccountChange(
       TOKEN_PROGRAM_ID,
-      (keyed) => {
-        void this.handleTokenAccountChange(wallet, keyed.accountId, keyed.accountInfo);
-      },
+      (keyed) => void this.handleTokenChange(wallet, keyed.accountId, keyed.accountInfo),
       'confirmed',
       [{ dataSize: 165 }, { memcmp: { offset: 32, bytes: wallet } }],
     );
     this.tokenSubs.set(wallet, tokenSub);
   }
 
-  private async handleTokenAccountChange(
-    wallet: string,
-    accountId: PublicKey,
-    accountInfo: Parameters<typeof unpackAccount>[1],
-  ): Promise<void> {
+  private async handleTokenChange(wallet: string, accountId: PublicKey, accountInfo: Parameters<typeof unpackAccount>[1]): Promise<void> {
     let parsed;
     try {
       parsed = unpackAccount(accountId, accountInfo, TOKEN_PROGRAM_ID);
     } catch {
       return;
     }
-
     const key = accountId.toBase58();
     const prev = this.lastTokenAmount.get(key) ?? 0n;
     const delta = parsed.amount - prev;
     this.lastTokenAmount.set(key, parsed.amount);
-    if (delta <= 0n) return; // only fire on receipts (balance increase)
+    if (delta <= 0n) return;
 
     const mint = parsed.mint.toBase58();
     const decimals = await this.getDecimals(parsed.mint);
     const uiAmount = Number(delta) / 10 ** decimals;
-
-    // Fungible token received (and airdrops are a special case of this).
-    this.onEvent({ wallet, data: { triggerType: 'wallet_received_token', wallet, mint, amount: uiAmount } });
-    this.onEvent({ wallet, data: { triggerType: 'airdrop_detected', wallet, mint, amount: uiAmount } });
-
-    // A 0-decimal token transferred in is treated as an NFT.
+    this.onEvent({ target: wallet, data: { triggerType: 'wallet_received_token', kind: 'wallet', wallet, mint, amount: uiAmount } });
+    this.onEvent({ target: wallet, data: { triggerType: 'airdrop_detected', kind: 'wallet', wallet, mint, amount: uiAmount } });
     if (decimals === 0) {
-      this.onEvent({ wallet, data: { triggerType: 'wallet_received_nft', wallet, mint } });
+      this.onEvent({ target: wallet, data: { triggerType: 'wallet_received_nft', kind: 'wallet', wallet, mint } });
     }
   }
 
-  /** Mint decimals, cached (used to classify NFTs vs fungible tokens). */
   private async getDecimals(mint: PublicKey): Promise<number> {
     const key = mint.toBase58();
     const cached = this.mintDecimals.get(key);
@@ -167,17 +182,76 @@ export class SolanaWatcher {
     }
   }
 
-  private async unsubscribe(wallet: string): Promise<void> {
-    const accountSub = this.accountSubs.get(wallet);
-    const logSub = this.logSubs.get(wallet);
-    const tokenSub = this.tokenSubs.get(wallet);
-    if (accountSub !== undefined) await this.connection.removeAccountChangeListener(accountSub);
-    if (logSub !== undefined) await this.connection.removeOnLogsListener(logSub);
-    if (tokenSub !== undefined) await this.connection.removeProgramAccountChangeListener(tokenSub);
+  private async unsubscribeWallet(wallet: string): Promise<void> {
+    const a = this.accountSubs.get(wallet);
+    const l = this.logSubs.get(wallet);
+    const t = this.tokenSubs.get(wallet);
+    if (a !== undefined) await this.connection.removeAccountChangeListener(a);
+    if (l !== undefined) await this.connection.removeOnLogsListener(l);
+    if (t !== undefined) await this.connection.removeProgramAccountChangeListener(t);
     this.accountSubs.delete(wallet);
     this.logSubs.delete(wallet);
     this.tokenSubs.delete(wallet);
     this.lastLamports.delete(wallet);
-    console.log(`[watcher] unsubscribed from ${wallet}`);
+    console.log(`[watcher] unsubscribed wallet ${wallet}`);
+  }
+
+  // --- Programs ---------------------------------------------------------
+
+  private async subscribeProgram(programId: string): Promise<void> {
+    let pubkey: PublicKey;
+    try {
+      pubkey = new PublicKey(programId);
+    } catch {
+      console.warn(`[watcher] invalid programId, skipping: ${programId}`);
+      return;
+    }
+    const sub = this.connection.onLogs(pubkey, (logs) => {
+      this.onEvent({
+        target: programId,
+        data: {
+          triggerType: 'contract_event_emitted',
+          kind: logs.err ? 'program_failed' : 'program_success',
+          programId,
+          signature: logs.signature,
+        },
+      });
+    });
+    this.programSubs.set(programId, sub);
+    console.log(`[watcher] subscribed program ${programId}`);
+  }
+
+  private async unsubscribeProgram(programId: string): Promise<void> {
+    const s = this.programSubs.get(programId);
+    if (s !== undefined) await this.connection.removeOnLogsListener(s);
+    this.programSubs.delete(programId);
+    console.log(`[watcher] unsubscribed program ${programId}`);
+  }
+
+  // --- Accounts ---------------------------------------------------------
+
+  private async subscribeAccount(account: string): Promise<void> {
+    let pubkey: PublicKey;
+    try {
+      pubkey = new PublicKey(account);
+    } catch {
+      console.warn(`[watcher] invalid account, skipping: ${account}`);
+      return;
+    }
+    const sub = this.connection.onAccountChange(pubkey, (info) => {
+      this.onEvent({
+        target: account,
+        data: { triggerType: 'liquidity_pool_balance_changed', kind: 'account', account, lamports: info.lamports },
+      });
+    });
+    this.dataSubs.set(account, sub);
+    console.log(`[watcher] subscribed account ${account}`);
+  }
+
+  private async unsubscribeAccount(account: string): Promise<void> {
+    const s = this.dataSubs.get(account);
+    if (s !== undefined) await this.connection.removeAccountChangeListener(s);
+    this.dataSubs.delete(account);
+    console.log(`[watcher] unsubscribed account ${account}`);
   }
 }

@@ -96,10 +96,20 @@ governance, deploy, oracle update, cross-chain, …).
 
 What runs for real today vs. simulated:
 
-- **Triggers detected live** over raw RPC websockets (no API key): `wallet_received_sol`,
-  `transaction_confirmed`, `wallet_balance_below_threshold`, and `scheduled_time` (interval timer in
-  the trigger service). The rest are selectable/configurable; their detection is a documented
-  extension point in `apps/trigger-service/src/watcher.ts`.
+- **Triggers detected live** over raw RPC websockets (no API key) — 18 of 23:
+  - *wallet* (`config.wallet`): `wallet_received_sol`, `wallet_received_token`, `wallet_received_nft`,
+    `airdrop_detected`, `transaction_confirmed`, `wallet_balance_below_threshold`,
+    `wallet_funded_by_address` (resolves the sender).
+  - *program logs* (`config.programId`): `contract_event_emitted`, `contract_execution_failed`,
+    `specific_contract_interaction`, `user_interacts_with_dapp`, `governance_vote_triggered`.
+  - *account changes*: `liquidity_pool_balance_changed` (poolAddress), `staking_rewards_earned`
+    (stakeAccount), `token_vesting_release` (vestingAccount).
+  - *other*: `new_block_mined` (slot subscription), `scheduled_time` (interval timer),
+    `token_price_threshold` (Jupiter price poll).
+
+  The 5 not yet live need richer indexing (Metaplex / DEX / bridge): `nft_minted`, `nft_transferred`,
+  `token_swap_executed`, `new_token_listing`, `cross_chain_token_transfer` — extension points in
+  `apps/trigger-service/src/watcher.ts`.
 - **Actions executed for real**: `send_webhook`, `send_discord_message`, `send_email`,
   `send_notification`, `record_transaction_db`, `fetch_latest_transactions`, `store_log`, the
   **on-chain SPL actions** `send_tokens` (native SOL or SPL), `mint_tokens`, `burn_tokens`,
@@ -123,9 +133,10 @@ What runs for real today vs. simulated:
   message from Solana (the guardians produce a VAA redeemable on the destination chain) — see
   `apps/worker/src/wormhole.ts`.
 
-  Still `simulated` (each is a thin variant of an existing real action, or needs a separate program):
-  `reward_user_tokens` / `allocate_funds` (token transfers), `initiate_custom_action`,
-  `send_alert_and_rollback`, and `deploy_contract`.
+  The remaining actions are also wired: `reward_user_tokens` (SPL transfer), `allocate_funds`
+  (multi-recipient SOL transfer), `initiate_custom_action` (routes to swap/stake/send/program call),
+  `send_alert_and_rollback` (alert webhook; Solana txns are atomic so failures auto-rollback), and
+  `deploy_contract` (deploys a new SPL token mint). **All 24 action types execute for real.**
 
 Adding a real handler is one file + one registry line in `apps/worker/src/actions/`.
 

@@ -7,26 +7,55 @@ import { SolanaWatcher, type DetectedEvent } from './watcher';
 const RPC_URL = process.env.SOLANA_RPC_URL ?? 'https://api.devnet.solana.com';
 const WS_URL = process.env.SOLANA_WS_URL ?? 'wss://api.devnet.solana.com';
 const REFRESH_INTERVAL_MS = Number(process.env.REFRESH_INTERVAL_MS ?? 15000);
+const PRICE_POLL_MS = Number(process.env.PRICE_POLL_MS ?? 30000);
+const JUPITER_PRICE_API = process.env.JUPITER_PRICE_API ?? 'https://api.jup.ag/price/v2';
 
-/**
- * In-memory index of active workflows keyed by the wallet they watch, so an
- * on-chain event can be matched to workflows without a DB round-trip.
- */
 type Subscription = { workflowId: string; triggerType: string; config: TriggerConfig };
-let walletIndex = new Map<string, Subscription[]>();
 
-/** Timers for scheduled_time triggers, keyed by workflow id. */
+// Trigger type → which subscription family it belongs to.
+const WALLET_TYPES = new Set([
+  'wallet_received_sol', 'wallet_received_token', 'wallet_received_nft', 'airdrop_detected',
+  'transaction_confirmed', 'wallet_balance_below_threshold', 'wallet_funded_by_address',
+]);
+const PROGRAM_TYPES = new Set([
+  'contract_event_emitted', 'contract_execution_failed', 'specific_contract_interaction',
+  'user_interacts_with_dapp', 'governance_vote_triggered',
+]);
+const PROGRAM_SUCCESS_TYPES = new Set([
+  'contract_event_emitted', 'specific_contract_interaction', 'user_interacts_with_dapp', 'governance_vote_triggered',
+]);
+const ACCOUNT_TYPES = new Set(['liquidity_pool_balance_changed', 'staking_rewards_earned', 'token_vesting_release']);
+
+/** Resolve the on-chain target string a trigger should subscribe to. */
+function targetFor(type: string, c: TriggerConfig): string | null {
+  if (WALLET_TYPES.has(type)) return c.wallet ?? null;
+  if (PROGRAM_TYPES.has(type)) return (c.programId as string) ?? null;
+  if (type === 'liquidity_pool_balance_changed') return (c.poolAddress as string) ?? null;
+  if (type === 'staking_rewards_earned') return (c.stakeAccount as string) ?? c.wallet ?? null;
+  if (type === 'token_vesting_release') return (c.vestingAccount as string) ?? null;
+  if (type === 'new_block_mined') return 'slot';
+  return null;
+}
+
+let index = new Map<string, Subscription[]>();
 const scheduleTimers = new Map<string, NodeJS.Timeout>();
+let priceWatches: Subscription[] = [];
+const priceFired = new Map<string, boolean>(); // workflowId → was-satisfied (edge trigger)
 
-/** Load active workflows + triggers; rebuild the wallet index and reconcile timers. */
-async function loadSubscriptions(): Promise<Set<string>> {
+/** Load active triggers; rebuild the index + target sets and reconcile timers. */
+async function loadSubscriptions() {
   const triggers = await prisma.trigger.findMany({
     where: { workflow: { isActive: true } },
     include: { workflow: { select: { id: true } } },
   });
 
   const next = new Map<string, Subscription[]>();
+  const wallets = new Set<string>();
+  const programs = new Set<string>();
+  const accounts = new Set<string>();
+  const prices: Subscription[] = [];
   const scheduledIds = new Set<string>();
+  let slots = false;
 
   for (const t of triggers) {
     const config = (t.config ?? {}) as TriggerConfig;
@@ -37,26 +66,36 @@ async function loadSubscriptions(): Promise<Set<string>> {
       ensureScheduleTimer(t.workflowId, Number(config.intervalSeconds) || 0);
       continue;
     }
-    if (!config.wallet) continue; // only wallet-scoped triggers can be subscribed
-    const list = next.get(config.wallet) ?? [];
+    if (t.type === 'token_price_threshold') {
+      if (config.mint && config.targetPrice != null) prices.push(sub);
+      continue;
+    }
+
+    const target = targetFor(t.type, config);
+    if (!target) continue;
+
+    const list = next.get(target) ?? [];
     list.push(sub);
-    next.set(config.wallet, list);
+    next.set(target, list);
+
+    if (target === 'slot') slots = true;
+    else if (WALLET_TYPES.has(t.type)) wallets.add(target);
+    else if (PROGRAM_TYPES.has(t.type)) programs.add(target);
+    else if (ACCOUNT_TYPES.has(t.type)) accounts.add(target);
   }
 
-  // Tear down timers for workflows that are no longer scheduled/active.
   for (const id of [...scheduleTimers.keys()]) {
     if (!scheduledIds.has(id)) {
       clearInterval(scheduleTimers.get(id)!);
       scheduleTimers.delete(id);
-      console.log(`[schedule] cleared timer for ${id}`);
     }
   }
 
-  walletIndex = next;
-  return new Set(next.keys());
+  index = next;
+  priceWatches = prices;
+  return { wallets, programs, accounts, slots };
 }
 
-/** Create (once) an interval timer that enqueues a scheduled workflow. */
 function ensureScheduleTimer(workflowId: string, intervalSeconds: number) {
   if (intervalSeconds <= 0 || scheduleTimers.has(workflowId)) return;
   const timer = setInterval(
@@ -71,38 +110,83 @@ function ensureScheduleTimer(workflowId: string, intervalSeconds: number) {
   console.log(`[schedule] every ${intervalSeconds}s → workflow ${workflowId}`);
 }
 
-/** Does a detected event satisfy a workflow's trigger type + thresholds? */
-function matches(sub: Subscription, data: TriggerData): boolean {
-  if (sub.triggerType !== data.triggerType) return false;
-
-  if (data.triggerType === 'wallet_balance_below_threshold') {
-    const th = sub.config.threshold;
-    return typeof th === 'number' && typeof data.balanceSol === 'number' && data.balanceSol < th;
+/** Does a detected event (carrying a `kind`) satisfy a subscription? */
+function matchSub(sub: Subscription, data: DetectedEvent['data']): boolean {
+  switch (data.kind) {
+    case 'program_success':
+      return PROGRAM_SUCCESS_TYPES.has(sub.triggerType);
+    case 'program_failed':
+      return sub.triggerType === 'contract_execution_failed';
+    case 'account':
+      return ACCOUNT_TYPES.has(sub.triggerType);
+    case 'slot': {
+      if (sub.triggerType !== 'new_block_mined') return false;
+      const every = Number(sub.config.everyNthSlot) || 1;
+      return typeof data.slot === 'number' && data.slot % every === 0;
+    }
+    case 'wallet':
+    default:
+      if (sub.triggerType !== data.triggerType) return false;
+      if (data.triggerType === 'wallet_balance_below_threshold') {
+        const th = sub.config.threshold;
+        return typeof th === 'number' && typeof data.balanceSol === 'number' && data.balanceSol < th;
+      }
+      if (data.triggerType === 'wallet_funded_by_address') {
+        return !sub.config.fromAddress || sub.config.fromAddress === data.fromAddress;
+      }
+      if (sub.config.mint && (data.triggerType === 'wallet_received_token' || data.triggerType === 'wallet_received_nft' || data.triggerType === 'airdrop_detected')) {
+        if (data.mint !== sub.config.mint) return false;
+      }
+      if (sub.config.minAmount != null && typeof data.amount === 'number') return data.amount >= sub.config.minAmount;
+      return true;
   }
-
-  // Token / NFT receipts can be scoped to a specific mint.
-  const mintScoped =
-    data.triggerType === 'wallet_received_token' ||
-    data.triggerType === 'wallet_received_nft' ||
-    data.triggerType === 'airdrop_detected';
-  if (mintScoped && sub.config.mint && data.mint !== sub.config.mint) return false;
-
-  if (sub.config.minAmount != null && typeof data.amount === 'number') {
-    return data.amount >= sub.config.minAmount;
-  }
-  return true;
 }
 
-/** Fan a detected on-chain event out to every matching active workflow. */
-async function handleEvent({ wallet, data }: DetectedEvent): Promise<void> {
-  if (!isTriggerType(data.triggerType)) return;
-  const subs = walletIndex.get(wallet) ?? [];
-  const matched = subs.filter((s) => matches(s, data));
+async function handleEvent({ target, data }: DetectedEvent): Promise<void> {
+  const subs = index.get(target) ?? [];
+  const matched = subs.filter((s) => matchSub(s, data));
   if (matched.length === 0) return;
 
-  console.log(`[trigger] ${data.triggerType} on ${wallet} → ${matched.length} workflow(s)`);
   for (const sub of matched) {
-    await enqueueExecution({ workflowId: sub.workflowId, triggerData: data });
+    if (!isTriggerType(sub.triggerType)) continue;
+    const triggerData: TriggerData = { ...data, triggerType: sub.triggerType };
+    console.log(`[trigger] ${sub.triggerType} on ${target} → workflow ${sub.workflowId}`);
+    await enqueueExecution({ workflowId: sub.workflowId, triggerData });
+  }
+}
+
+/** Poll token prices and fire token_price_threshold on a false→true crossing. */
+async function pollPrices(): Promise<void> {
+  if (priceWatches.length === 0) return;
+  const mints = [...new Set(priceWatches.map((s) => s.config.mint as string))];
+  let prices: Record<string, number> = {};
+  try {
+    const res = await fetch(`${JUPITER_PRICE_API}?ids=${mints.join(',')}`);
+    const body = await res.json();
+    for (const [mint, info] of Object.entries(body.data ?? {})) {
+      const price = Number((info as { price?: string }).price);
+      if (Number.isFinite(price)) prices[mint] = price;
+    }
+  } catch (err) {
+    console.error('[price] poll error:', err instanceof Error ? err.message : err);
+    return;
+  }
+
+  for (const sub of priceWatches) {
+    const price = prices[sub.config.mint as string];
+    if (price == null) continue;
+    const target = Number(sub.config.targetPrice);
+    const above = (sub.config.direction ?? 'above') === 'above';
+    const satisfied = above ? price >= target : price <= target;
+    const prev = priceFired.get(sub.workflowId) ?? false;
+    priceFired.set(sub.workflowId, satisfied);
+    if (satisfied && !prev) {
+      console.log(`[trigger] token_price_threshold ${sub.config.mint} @ ${price} → workflow ${sub.workflowId}`);
+      await enqueueExecution({
+        workflowId: sub.workflowId,
+        triggerData: { triggerType: 'token_price_threshold', mint: sub.config.mint, price, targetPrice: target },
+      }).catch((err) => console.error('[price] enqueue error:', err));
+    }
   }
 }
 
@@ -114,8 +198,7 @@ async function main() {
 
   const refresh = async () => {
     try {
-      const wallets = await loadSubscriptions();
-      await watcher.sync(wallets);
+      await watcher.sync(await loadSubscriptions());
     } catch (err) {
       console.error('[trigger] refresh error:', err);
     }
@@ -123,13 +206,12 @@ async function main() {
 
   await refresh();
   setInterval(refresh, REFRESH_INTERVAL_MS);
+  setInterval(() => void pollPrices(), PRICE_POLL_MS);
   console.log(
-    `🛰️  Watching ${walletIndex.size} wallet(s), ${scheduleTimers.size} schedule(s); refreshing every ${REFRESH_INTERVAL_MS}ms`,
+    `🛰️  Watching ${index.size} target(s), ${scheduleTimers.size} schedule(s), ${priceWatches.length} price(s); refresh ${REFRESH_INTERVAL_MS}ms`,
   );
 }
 
-// Survive stray rejections (e.g. RPC 429s from token-account lookups) so the
-// listener keeps running instead of dying on a single bad event.
 process.on('unhandledRejection', (reason) =>
   console.error('[trigger] unhandledRejection:', reason instanceof Error ? reason.message : reason),
 );
