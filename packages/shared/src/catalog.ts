@@ -443,9 +443,14 @@ export const ACTION_CATALOG: CatalogEntry<ActionType>[] = [
   {
     type: 'create_liquidity_pool',
     label: 'Create liquidity pool',
-    description: 'Automatically creates a new liquidity pool on a DEX.',
+    description: 'Creates a Raydium CPMM pool from two tokens (tokenB defaults to wrapped SOL).',
     implementation: 'smart_contract',
-    fields: [{ key: 'tokenA', label: 'Token A mint', required: true }, { key: 'tokenB', label: 'Token B mint', required: true }],
+    fields: [
+      { key: 'tokenA', label: 'Token A mint', required: true },
+      { key: 'amountA', label: 'Amount A', type: 'number', required: true },
+      { key: 'tokenB', label: 'Token B mint (defaults to wSOL)', placeholder: 'So111…112' },
+      { key: 'amountB', label: 'Amount B', type: 'number', required: true },
+    ],
   },
   {
     type: 'update_oracle_data',

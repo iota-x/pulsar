@@ -117,9 +117,12 @@ What runs for real today vs. simulated:
   builds these instructions directly (8-byte discriminator + Borsh args) — see
   `apps/worker/src/anchorProgram.ts`.
 
-  Still `simulated` because they need heavyweight external integrations: `create_liquidity_pool`
-  (Raydium/Orca SDK), `trigger_cross_chain_tx` (Wormhole + a destination chain), and the remaining
-  governance / contract-deploy actions.
+  `create_liquidity_pool` is also real: it creates a **Raydium CPMM pool** from two tokens
+  (tokenB defaults to wrapped SOL) via `@raydium-io/raydium-sdk-v2`, using the devnet CPMM program
+  on devnet and the mainnet program otherwise — see `apps/worker/src/actions/createLiquidityPool.ts`.
+
+  Still `simulated` because they need heavyweight external integrations: `trigger_cross_chain_tx`
+  (Wormhole + a destination chain) and the remaining governance / contract-deploy actions.
 
 Adding a real handler is one file + one registry line in `apps/worker/src/actions/`.
 
