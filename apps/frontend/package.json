@@ -9,7 +9,11 @@
     "lint": "next lint"
   },
   "dependencies": {
+    "@solana/spl-token": "^0.4.14",
+    "@solana/web3.js": "^1.98.4",
     "@web3-zapier/shared": "*",
+    "bs58": "^6.0.0",
+    "buffer": "^6.0.3",
     "framer-motion": "^12.40.0",
     "next": "^14.2.5",
     "react": "^18.3.1",

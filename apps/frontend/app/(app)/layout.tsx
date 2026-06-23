@@ -8,11 +8,13 @@ import { tokenStore } from '@/lib/api';
 import { AuroraBackground } from '@/components/AuroraBackground';
 import { Logo } from '@/components/Logo';
 import { ThemeToggle } from '@/components/ThemeToggle';
+import { WalletContext } from '@/components/WalletContext';
 
 const nav = [
   { href: '/dashboard', label: 'Dashboard' },
   { href: '/workflows', label: 'Workflows' },
   { href: '/history', label: 'History' },
+  { href: '/wallet', label: 'Wallet' },
   { href: '/learn', label: 'Learn' },
 ];
 
@@ -34,6 +36,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   }
 
   return (
+    <WalletContext>
     <div className="relative min-h-screen">
       <AuroraBackground grid={false} />
 
@@ -73,5 +76,6 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
       <main className="mx-auto max-w-6xl px-4 py-10">{children}</main>
     </div>
+    </WalletContext>
   );
 }

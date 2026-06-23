@@ -21,3 +21,13 @@ export const getMe = asyncHandler(async (req: AuthedRequest, res: Response) => {
   const user = await userService.getUserById(req.userId!);
   res.status(200).json(user);
 });
+
+/** Link a signature-verified Solana wallet to the authenticated user. */
+export const linkWallet = asyncHandler(async (req: AuthedRequest, res: Response) => {
+  const { walletAddress, signature } = req.body ?? {};
+  if (typeof walletAddress !== 'string' || typeof signature !== 'string') {
+    return res.status(422).json({ error: 'walletAddress and signature are required' });
+  }
+  const user = await userService.linkWallet(req.userId!, walletAddress, signature);
+  res.status(200).json(user);
+});

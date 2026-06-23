@@ -22,7 +22,10 @@ export async function executeWorkflow(job: ExecutionJob): Promise<void> {
 
   const workflow = await prisma.workflow.findUnique({
     where: { id: workflowId },
-    include: { actions: { orderBy: { order: 'asc' } } },
+    include: {
+      actions: { orderBy: { order: 'asc' } },
+      user: { select: { walletAddress: true } },
+    },
   });
 
   if (!workflow) {
@@ -58,7 +61,14 @@ export async function executeWorkflow(job: ExecutionJob): Promise<void> {
     }
 
     try {
-      const detail = await handler((action.config ?? {}) as ActionConfig, triggerData);
+      const config = { ...((action.config as Record<string, unknown>) ?? {}) } as ActionConfig;
+      // Delegated mode: bind the owner to the workflow author's VERIFIED wallet
+      // (server-trusted) — never trust a client-supplied owner.
+      if (config.useDelegation) {
+        if (!workflow.user.walletAddress) throw new Error('No wallet linked to this account for delegated actions');
+        config.owner = workflow.user.walletAddress;
+      }
+      const detail = await handler(config, triggerData);
       results.push({ actionId: action.id, type: action.type, status: 'success', detail });
       console.log(`[executor] ✓ ${action.type}: ${detail}`);
     } catch (err) {

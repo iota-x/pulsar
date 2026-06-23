@@ -11,12 +11,13 @@ datasource db {
 }
 
 model User {
-  id          String    @id @default(cuid())
-  email       String    @unique
-  password    String
-  workflows   Workflow[]
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
+  id            String    @id @default(cuid())
+  email         String    @unique
+  password      String
+  walletAddress String?   // verified (signature-proven) Solana wallet for delegated actions
+  workflows     Workflow[]
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
 }
 
 model Workflow {

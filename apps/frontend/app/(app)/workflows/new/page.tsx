@@ -217,6 +217,17 @@ export default function NewWorkflowPage() {
               ))}
             </select>
             <p className="text-xs text-slate-500">{ACTION_BY_TYPE[action.type].description}</p>
+            {action.type === 'send_tokens' && (
+              <label className="flex items-center gap-2 rounded-xl border border-violet-400/20 bg-violet-500/[0.06] px-3 py-2 text-sm text-slate-200">
+                <input
+                  type="checkbox"
+                  className="h-4 w-4 accent-violet-500"
+                  checked={action.config.useDelegation === 'true'}
+                  onChange={(e) => setActionField(i, 'useDelegation', e.target.checked ? 'true' : '')}
+                />
+                Use my own wallet (delegated) — moves the token from <span className="font-medium text-violet-300">your</span> linked wallet, capped by what you authorized.
+              </label>
+            )}
             <ConfigFields
               fields={ACTION_FIELDS[action.type]}
               config={action.config}

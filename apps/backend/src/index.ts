@@ -1,7 +1,7 @@
 import express from 'express';
 import cors from 'cors';
 import { config } from './config';
-import { registerUser, loginUser, getMe } from './controllers/userController';
+import { registerUser, loginUser, getMe, linkWallet } from './controllers/userController';
 import {
   createWorkflow,
   getAllWorkflows,
@@ -28,6 +28,7 @@ app.post('/auth/login', loginUser);
 
 // --- Auth (protected) ---
 app.get('/auth/me', authMiddleware, getMe);
+app.post('/auth/wallet', authMiddleware, linkWallet);
 
 // --- Dashboard ---
 app.get('/dashboard', authMiddleware, getDashboard);

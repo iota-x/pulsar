@@ -65,5 +65,6 @@ export interface DashboardStats {
 export interface User {
   id: string;
   email: string;
+  walletAddress?: string | null;
   createdAt: string;
 }
