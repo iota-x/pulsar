@@ -2,6 +2,7 @@ import { VersionedTransaction, LAMPORTS_PER_SOL } from '@solana/web3.js';
 import { getMint } from '@solana/spl-token';
 import type { ActionHandler } from './types';
 import { connection, getSigner, explorerUrl, toPublicKey } from '../solana';
+import { executeDelegatedSwap } from './delegatedSwap';
 
 const SOL_MINT = 'So11111111111111111111111111111111111111112';
 // Jupiter's current public swap API. (The legacy quote-api.jup.ag/v6 host was retired.)
@@ -18,6 +19,11 @@ const JUPITER_API = process.env.JUPITER_API_URL ?? 'https://api.jup.ag/swap/v1';
  * which case the quote step returns a real "no route" error.
  */
 export const executeBuySellOrder: ActionHandler = async (config) => {
+  // Delegated mode: the executor injected the user's own (signature-verified)
+  // wallet as `owner`. Pull their delegated token and swap it atomically — the
+  // operator never custodies funds. Jupiter has mainnet liquidity only.
+  if (config.owner) return executeDelegatedSwap(config);
+
   const signer = getSigner();
   if (!signer) throw new Error('execute_buy_sell_order: no signer configured (set SOLANA_SIGNER_SECRET_KEY)');
   if (!config.mint) throw new Error('execute_buy_sell_order: "mint" is required');

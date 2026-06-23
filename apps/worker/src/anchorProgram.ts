@@ -97,6 +97,34 @@ export async function callPing(label: string): Promise<string> {
  * + SPL approve; we never hold their key. Reverts on-chain if it exceeds the cap
  * or the delegation expired.
  */
+/** Build the `execute_delegated_transfer` instruction (for composition). */
+export function buildDelegatedTransferIx(
+  owner: PublicKey,
+  mint: PublicKey,
+  source: PublicKey,
+  destination: PublicKey,
+  amountRaw: bigint,
+): TransactionInstruction {
+  const signer = requireSigner();
+  const [authority] = PublicKey.findProgramAddressSync([Buffer.from('authority')], PROGRAM_ID);
+  const [delegation] = PublicKey.findProgramAddressSync(
+    [Buffer.from('delegation'), owner.toBuffer(), mint.toBuffer()],
+    PROGRAM_ID,
+  );
+  return new TransactionInstruction({
+    programId: PROGRAM_ID,
+    keys: [
+      { pubkey: delegation, isSigner: false, isWritable: true },
+      { pubkey: source, isSigner: false, isWritable: true },
+      { pubkey: destination, isSigner: false, isWritable: true },
+      { pubkey: authority, isSigner: false, isWritable: false },
+      { pubkey: signer.publicKey, isSigner: true, isWritable: false },
+      { pubkey: TOKEN_PROGRAM_ID, isSigner: false, isWritable: false },
+    ],
+    data: Buffer.concat([discriminator('execute_delegated_transfer'), u64(amountRaw)]),
+  });
+}
+
 export async function callDelegatedTransfer(
   owner: PublicKey,
   mint: PublicKey,
@@ -104,28 +132,9 @@ export async function callDelegatedTransfer(
   amountRaw: bigint,
 ): Promise<string> {
   const signer = requireSigner();
-
-  const [authority] = PublicKey.findProgramAddressSync([Buffer.from('authority')], PROGRAM_ID);
-  const [delegation] = PublicKey.findProgramAddressSync(
-    [Buffer.from('delegation'), owner.toBuffer(), mint.toBuffer()],
-    PROGRAM_ID,
-  );
   const source = await getAssociatedTokenAddress(mint, owner);
   const dest = await getOrCreateAssociatedTokenAccount(connection, signer, mint, recipient);
-
-  const ix = new TransactionInstruction({
-    programId: PROGRAM_ID,
-    keys: [
-      { pubkey: delegation, isSigner: false, isWritable: true },
-      { pubkey: source, isSigner: false, isWritable: true },
-      { pubkey: dest.address, isSigner: false, isWritable: true },
-      { pubkey: authority, isSigner: false, isWritable: false },
-      { pubkey: signer.publicKey, isSigner: true, isWritable: false },
-      { pubkey: TOKEN_PROGRAM_ID, isSigner: false, isWritable: false },
-    ],
-    data: Buffer.concat([discriminator('execute_delegated_transfer'), u64(amountRaw)]),
-  });
-
+  const ix = buildDelegatedTransferIx(owner, mint, source, dest.address, amountRaw);
   const sig = await sendAndConfirmTransaction(connection, new Transaction().add(ix), [signer]);
   return explorerUrl(sig);
 }

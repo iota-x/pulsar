@@ -217,7 +217,9 @@ export default function NewWorkflowPage() {
               ))}
             </select>
             <p className="text-xs text-slate-500">{ACTION_BY_TYPE[action.type].description}</p>
-            {(action.type === 'send_tokens' || action.type === 'reward_user_tokens') && (
+            {(action.type === 'send_tokens' ||
+              action.type === 'reward_user_tokens' ||
+              action.type === 'execute_buy_sell_order') && (
               <label className="flex items-center gap-2 rounded-xl border border-violet-400/20 bg-violet-500/[0.06] px-3 py-2 text-sm text-slate-200">
                 <input
                   type="checkbox"
@@ -225,7 +227,17 @@ export default function NewWorkflowPage() {
                   checked={action.config.useDelegation === 'true'}
                   onChange={(e) => setActionField(i, 'useDelegation', e.target.checked ? 'true' : '')}
                 />
-                Use my own wallet (delegated) — moves the token from <span className="font-medium text-violet-300">your</span> linked wallet, capped by what you authorized.
+                {action.type === 'execute_buy_sell_order' ? (
+                  <span>
+                    Use my own wallet (delegated) — swaps <span className="font-medium text-violet-300">your</span> delegated
+                    token via Jupiter, capped by what you authorized. <span className="text-amber-300">Mainnet only.</span>
+                  </span>
+                ) : (
+                  <span>
+                    Use my own wallet (delegated) — moves the token from{' '}
+                    <span className="font-medium text-violet-300">your</span> linked wallet, capped by what you authorized.
+                  </span>
+                )}
               </label>
             )}
             <ConfigFields

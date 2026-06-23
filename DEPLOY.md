@@ -135,3 +135,26 @@ Caddy serves the frontend at `/` and proxies the API under `/api/*`. Visit
 - Stay on **devnet** to avoid real costs; the public Solana RPC is free but rate-limited.
 - Back up the program upgrade keypair if you redeploy the Anchor program (it's the
   worker signer here, kept in `SOLANA_SIGNER_SECRET_KEY`).
+
+## Going to mainnet (delegated swaps)
+
+The `execute_buy_sell_order` action supports a **non-custodial delegated swap** that
+only works on mainnet (Jupiter routes mainnet liquidity; on devnet the quote returns
+"no route"). To enable it:
+
+1. Set `SOLANA_RPC` to a mainnet endpoint and redeploy the Anchor program to
+   mainnet-beta (update `WEB3_ZAPIER_PROGRAM_ID` / `NEXT_PUBLIC_PROGRAM_ID`).
+2. Fund the worker signer (operator) with a little SOL for fees — keep it a hot
+   wallet with minimal balance. **Never commit a mainnet key.**
+3. A user links their wallet, then on the **Wallet** page authorizes the input token
+   (the token they're selling, or wSOL via "Delegate SOL" if they're buying). For
+   swap-delegations, leave the recipient allowlist empty (or include the operator),
+   since the pull's intermediate destination is the operator's account.
+4. In a workflow, pick **Execute a buy/sell order** and tick **Use my own wallet
+   (delegated)**.
+
+When the trigger fires, the worker builds ONE atomic transaction: pull the user's
+delegated token (capped by the delegation) → swap via Jupiter → deliver the output
+straight to the user. If any step fails the whole tx reverts, so the operator never
+custodies funds beyond the atomic boundary. The amount is always bounded by the
+on-chain delegation cap — the user can revoke anytime from their wallet.
