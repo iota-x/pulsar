@@ -8,14 +8,19 @@ import {
 } from '@solana/web3.js';
 import {
   getAssociatedTokenAddress,
+  getAssociatedTokenAddressSync,
+  createAssociatedTokenAccountInstruction,
   createApproveInstruction,
   createRevokeInstruction,
+  createSyncNativeInstruction,
   getMint,
 } from '@solana/spl-token';
 
 export const PROGRAM_ID = new PublicKey(
   process.env.NEXT_PUBLIC_PROGRAM_ID ?? '3UDvaK5Xxa7JsGUF3peRzbgspk5ASUQxCQEfhibj7Rjs',
 );
+/** Wrapped SOL mint — lets users delegate SOL value (native SOL can't be delegated). */
+export const WSOL_MINT = new PublicKey('So11111111111111111111111111111111111111112');
 /** The worker's public key — recorded as the authorized operator in delegations. */
 export const OPERATOR = new PublicKey(
   process.env.NEXT_PUBLIC_OPERATOR_PUBKEY ?? 'FgCiArPJfe9YCfW8Gioo87uoG7M9zXiPg8JvJHK3uTtJ',
@@ -45,6 +50,36 @@ export const delegationPda = (owner: PublicKey, mint: PublicKey): PublicKey =>
     PROGRAM_ID,
   )[0];
 
+/** The `create_delegation` instruction (records cap/expiry/operator/recipients). */
+function createDelegationIx(
+  owner: PublicKey,
+  mint: PublicKey,
+  maxRaw: bigint,
+  expiryUnix: number,
+  recipients: string[],
+): TransactionInstruction {
+  const recipientKeys = recipients.map((r) => new PublicKey(r.trim()));
+  const recLen = Buffer.alloc(4);
+  recLen.writeUInt32LE(recipientKeys.length, 0); // Borsh Vec<Pubkey>: len + 32 bytes each
+  const recBytes = Buffer.concat([recLen, ...recipientKeys.map((k) => k.toBuffer())]);
+  return new TransactionInstruction({
+    programId: PROGRAM_ID,
+    keys: [
+      { pubkey: delegationPda(owner, mint), isSigner: false, isWritable: true },
+      { pubkey: mint, isSigner: false, isWritable: false },
+      { pubkey: owner, isSigner: true, isWritable: true },
+      { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
+    ],
+    data: Buffer.concat([
+      Buffer.from(CREATE_DELEGATION_DISC),
+      u64(maxRaw),
+      i64(BigInt(Math.trunc(expiryUnix))),
+      OPERATOR.toBuffer(),
+      recBytes,
+    ]),
+  });
+}
+
 /**
  * Build the one-time transaction the user signs to authorize automation:
  * SPL `approve` (token account → authority PDA) + `create_delegation` with the
@@ -63,31 +98,35 @@ export async function buildDelegationTx(
   const maxRaw = BigInt(Math.round(maxUi * 10 ** decimals));
   const userAta = await getAssociatedTokenAddress(mint, owner);
 
-  // Borsh Vec<Pubkey>: u32 LE length + 32 bytes each.
-  const recipientKeys = recipients.map((r) => new PublicKey(r.trim()));
-  const recLen = Buffer.alloc(4);
-  recLen.writeUInt32LE(recipientKeys.length, 0);
-  const recBytes = Buffer.concat([recLen, ...recipientKeys.map((k) => k.toBuffer())]);
+  return new Transaction()
+    .add(createApproveInstruction(userAta, authorityPda(), owner, maxRaw))
+    .add(createDelegationIx(owner, mint, maxRaw, expiryUnix, recipients));
+}
 
-  const approveIx = createApproveInstruction(userAta, authorityPda(), owner, maxRaw);
-  const createIx = new TransactionInstruction({
-    programId: PROGRAM_ID,
-    keys: [
-      { pubkey: delegationPda(owner, mint), isSigner: false, isWritable: true },
-      { pubkey: mint, isSigner: false, isWritable: false },
-      { pubkey: owner, isSigner: true, isWritable: true },
-      { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
-    ],
-    data: Buffer.concat([
-      Buffer.from(CREATE_DELEGATION_DISC),
-      u64(maxRaw),
-      i64(BigInt(Math.trunc(expiryUnix))),
-      OPERATOR.toBuffer(),
-      recBytes,
-    ]),
-  });
-
-  return new Transaction().add(approveIx).add(createIx);
+/**
+ * Wrap native SOL into wSOL and delegate it in one signature: create the wSOL
+ * token account (if needed), fund it with `solAmount`, sync, approve our PDA,
+ * and create the delegation. Lets users automate SOL transfers (native SOL has
+ * no delegate primitive). Recipients receive wSOL, which they can unwrap.
+ */
+export async function buildWrapAndDelegateTx(
+  connection: Connection,
+  owner: PublicKey,
+  solAmount: number,
+  expiryUnix: number,
+  recipients: string[] = [],
+): Promise<Transaction> {
+  const lamports = BigInt(Math.round(solAmount * 1e9)); // wSOL has 9 decimals
+  const ata = getAssociatedTokenAddressSync(WSOL_MINT, owner);
+  const tx = new Transaction();
+  if (!(await connection.getAccountInfo(ata))) {
+    tx.add(createAssociatedTokenAccountInstruction(owner, ata, owner, WSOL_MINT));
+  }
+  tx.add(SystemProgram.transfer({ fromPubkey: owner, toPubkey: ata, lamports: Number(lamports) }));
+  tx.add(createSyncNativeInstruction(ata));
+  tx.add(createApproveInstruction(ata, authorityPda(), owner, lamports));
+  tx.add(createDelegationIx(owner, WSOL_MINT, lamports, expiryUnix, recipients));
+  return tx;
 }
 
 export interface DelegationInfo {

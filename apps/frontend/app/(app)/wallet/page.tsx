@@ -6,7 +6,7 @@ import { Connection } from '@solana/web3.js';
 import { useWallet } from '@/components/WalletContext';
 import { api } from '@/lib/api';
 import type { User } from '@/lib/types';
-import { buildDelegationTx, buildRevokeTx, fetchDelegations, type DelegationInfo } from '@/lib/delegation';
+import { buildDelegationTx, buildWrapAndDelegateTx, buildRevokeTx, fetchDelegations, type DelegationInfo } from '@/lib/delegation';
 
 export default function WalletPage() {
   const connection = useMemo(
@@ -23,6 +23,7 @@ export default function WalletPage() {
   const [max, setMax] = useState('100');
   const [expiryDays, setExpiryDays] = useState('');
   const [recipients, setRecipients] = useState('');
+  const [solMode, setSolMode] = useState(false);
   const [delegations, setDelegations] = useState<DelegationInfo[]>([]);
 
   useEffect(() => {
@@ -84,9 +85,9 @@ export default function WalletPage() {
 
   const authorize = async () => {
     if (!publicKey || !sendTransaction) return;
-    if (!mint.trim()) return setMsg({ kind: 'err', text: 'Enter a token mint address' });
+    if (!solMode && !mint.trim()) return setMsg({ kind: 'err', text: 'Enter a token mint address' });
     const maxUi = Number(max);
-    if (!Number.isFinite(maxUi) || maxUi <= 0) return setMsg({ kind: 'err', text: 'Enter a valid max amount' });
+    if (!Number.isFinite(maxUi) || maxUi <= 0) return setMsg({ kind: 'err', text: 'Enter a valid amount' });
     setBusy('authorize');
     setMsg(null);
     try {
@@ -94,12 +95,14 @@ export default function WalletPage() {
         ? Math.floor(Date.now() / 1000) + Number(expiryDays) * 86400
         : 0;
       const recipientList = recipients.split(',').map((r) => r.trim()).filter(Boolean);
-      const tx = await buildDelegationTx(connection, publicKey, mint.trim(), maxUi, expiryUnix, recipientList);
+      const tx = solMode
+        ? await buildWrapAndDelegateTx(connection, publicKey, maxUi, expiryUnix, recipientList)
+        : await buildDelegationTx(connection, publicKey, mint.trim(), maxUi, expiryUnix, recipientList);
       const sig = await sendTransaction(tx, connection);
       await connection.confirmTransaction(sig, 'confirmed');
       setMsg({
         kind: 'ok',
-        text: `Authorized! Pulsar can now move up to ${maxUi} of this token${recipientList.length ? ` (only to ${recipientList.length} allowed recipient(s))` : ''}, until you revoke.`,
+        text: `Authorized! Pulsar can now move up to ${maxUi} ${solMode ? 'wSOL' : 'of this token'}${recipientList.length ? ` (only to ${recipientList.length} allowed recipient(s))` : ''}, until you revoke.`,
       });
       await loadDelegations();
     } catch (e) {
@@ -176,13 +179,19 @@ export default function WalletPage() {
             Your workflows can then move it automatically — never more than this cap.
           </p>
         </div>
+        <label className="flex w-fit items-center gap-2 rounded-xl border border-cyan-400/20 bg-cyan-500/[0.06] px-3 py-2 text-sm text-slate-200">
+          <input type="checkbox" className="h-4 w-4 accent-cyan-500" checked={solMode} onChange={(e) => setSolMode(e.target.checked)} />
+          Delegate <span className="font-medium text-cyan-300">SOL</span> (auto-wraps to wSOL)
+        </label>
         <div className="grid gap-3 sm:grid-cols-3">
-          <div className="sm:col-span-3">
-            <label className="label">Token mint address</label>
-            <input className="input" placeholder="e.g. EPjFWdd5…" value={mint} onChange={(e) => setMint(e.target.value)} />
-          </div>
+          {!solMode && (
+            <div className="sm:col-span-3">
+              <label className="label">Token mint address</label>
+              <input className="input" placeholder="e.g. EPjFWdd5…" value={mint} onChange={(e) => setMint(e.target.value)} />
+            </div>
+          )}
           <div>
-            <label className="label">Max amount</label>
+            <label className="label">{solMode ? 'SOL to wrap & delegate' : 'Max amount'}</label>
             <input className="input" type="number" value={max} onChange={(e) => setMax(e.target.value)} />
           </div>
           <div>
