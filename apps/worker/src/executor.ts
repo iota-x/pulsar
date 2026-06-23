@@ -4,10 +4,17 @@ import {
   type ActionConfig,
   type LogStatus,
   isActionType,
+  dedupeKeyFor,
   ACTION_BY_TYPE,
 } from '@web3-zapier/shared';
 import prisma from './prisma';
 import { actionHandlers } from './actions';
+import { notifyFailure } from './notify';
+
+/** Postgres unique-constraint violation (a duplicate dedupeKey claim). */
+function isUniqueViolation(err: unknown): boolean {
+  return typeof err === 'object' && err !== null && (err as { code?: string }).code === 'P2002';
+}
 
 /**
  * Load a workflow, run its actions in order, and persist an execution log.
@@ -18,7 +25,7 @@ import { actionHandlers } from './actions';
  * and logged, but real execution needs the on-chain signer).
  */
 export async function executeWorkflow(job: ExecutionJob): Promise<void> {
-  const { workflowId, triggerData } = job;
+  const { workflowId, triggerData, dryRun } = job;
 
   const workflow = await prisma.workflow.findUnique({
     where: { id: workflowId },
@@ -32,9 +39,40 @@ export async function executeWorkflow(job: ExecutionJob): Promise<void> {
     console.warn(`[executor] workflow ${workflowId} not found, skipping`);
     return;
   }
-  if (!workflow.isActive) {
+  if (!workflow.isActive && !dryRun) {
     console.log(`[executor] workflow ${workflowId} is inactive, skipping`);
     return;
+  }
+
+  // Dry-run: validate + describe, never touch the chain, never persist a log.
+  if (dryRun) {
+    const plan = workflow.actions.map((action) => describeAction(action.id, action.type, action.config));
+    console.log(`[executor] dry-run workflow ${workflowId}: ${plan.length} action(s)`);
+    return;
+  }
+
+  // Exactly-once claim: insert the running record keyed by dedupeKey. A unique
+  // violation means another worker/retry already handled this event → skip.
+  const dedupeKey = job.dedupeKey ?? dedupeKeyFor(workflowId, triggerData);
+  let logId: string;
+  try {
+    const claim = await prisma.log.create({
+      data: {
+        workflowId,
+        status: 'running' satisfies LogStatus,
+        triggerType: triggerData.triggerType,
+        triggerData: triggerData as object,
+        dedupeKey,
+      },
+      select: { id: true },
+    });
+    logId = claim.id;
+  } catch (err) {
+    if (isUniqueViolation(err)) {
+      console.log(`[executor] duplicate event ${dedupeKey}, skipping (already executed)`);
+      return;
+    }
+    throw err;
   }
 
   const results: ActionResult[] = [];
@@ -83,15 +121,36 @@ export async function executeWorkflow(job: ExecutionJob): Promise<void> {
   const status: LogStatus =
     failures === 0 ? 'success' : succeeded === 0 ? 'failed' : 'partial';
 
-  await prisma.log.create({
+  await prisma.log.update({
+    where: { id: logId },
     data: {
-      workflowId,
       status,
       message: `${succeeded}/${results.length} actions succeeded`,
-      triggerData: triggerData as object,
       resultData: results as object,
+      finishedAt: new Date(),
     },
   });
 
+  if (failures > 0) {
+    await notifyFailure(workflow.name, status, results).catch((e) =>
+      console.error('[executor] failure-alert error:', e instanceof Error ? e.message : e),
+    );
+  }
+
   console.log(`[executor] workflow ${workflowId} → ${status}`);
+}
+
+/** Describe what an action WOULD do, for dry-run plans (no execution). */
+function describeAction(actionId: string, type: string, config: unknown): ActionResult {
+  if (!isActionType(type)) {
+    return { actionId, type: type as never, status: 'failed', detail: 'Unknown action type' };
+  }
+  const entry = ACTION_BY_TYPE[type];
+  const required = entry.fields.filter((f) => f.required).map((f) => f.key);
+  const cfg = (config as Record<string, unknown>) ?? {};
+  const missing = required.filter((k) => cfg[k] === undefined || cfg[k] === '');
+  if (missing.length > 0) {
+    return { actionId, type, status: 'failed', detail: `Missing required: ${missing.join(', ')}` };
+  }
+  return { actionId, type, status: 'simulated', detail: `Would ${entry.label.toLowerCase()}` };
 }

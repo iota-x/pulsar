@@ -59,15 +59,23 @@ model Action {
   @@index([workflowId])
 }
 
+// An execution record. Doubles as the idempotency ledger: `dedupeKey` is unique,
+// so the worker claiming a key that already exists means "already ran" → skip.
 model Log {
   id          String    @id @default(cuid())
   workflowId  String
   workflow    Workflow  @relation(fields: [workflowId], references: [id], onDelete: Cascade)
-  status      String
+  status      String    // running | success | failed | partial | skipped | dead_letter
   message     String?
+  triggerType String?
   triggerData Json?
   resultData  Json?
+  // Unique key per logical trigger event → exactly-once execution.
+  dedupeKey   String?   @unique
+  startedAt   DateTime  @default(now())
+  finishedAt  DateTime?
   createdAt   DateTime  @default(now())
 
   @@index([workflowId])
+  @@index([status])
 }

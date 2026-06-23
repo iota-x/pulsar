@@ -1,4 +1,5 @@
 import { Response } from 'express';
+import { randomUUID } from 'crypto';
 import * as workflowService from '../services/workflowService';
 import { asyncHandler, AppError } from '../middlewares/errorHandler';
 import { createWorkflowSchema, updateWorkflowSchema } from '../validation/schemas';
@@ -47,6 +48,8 @@ export const runWorkflow = asyncHandler(async (req: AuthedRequest, res: Response
     triggerData: {
       triggerType: (workflow.trigger?.type as any) ?? 'transaction_confirmed',
       manual: true,
+      // Unique per click so manual test runs always execute (never deduped).
+      detectedAt: `manual-${Date.now()}-${randomUUID()}`,
       ...(req.body?.triggerData ?? {}),
     },
   });

@@ -3,6 +3,9 @@ const styles: Record<string, string> = {
   failed: 'bg-rose-500/10 text-rose-300 ring-rose-500/30',
   partial: 'bg-amber-500/10 text-amber-300 ring-amber-500/30',
   simulated: 'bg-sky-500/10 text-sky-300 ring-sky-500/30',
+  running: 'bg-indigo-500/10 text-indigo-300 ring-indigo-500/30',
+  skipped: 'bg-slate-500/10 text-slate-300 ring-slate-500/30',
+  dead_letter: 'bg-rose-600/15 text-rose-200 ring-rose-600/40',
 };
 
 export function StatusBadge({ status }: { status: string }) {

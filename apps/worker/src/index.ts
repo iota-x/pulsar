@@ -2,6 +2,7 @@ import 'dotenv/config';
 import { Worker, type ConnectionOptions } from 'bullmq';
 import { EXECUTION_QUEUE, type ExecutionJob } from '@web3-zapier/shared';
 import { executeWorkflow } from './executor';
+import { deadLetter } from './deadLetter';
 
 /** Parse a redis:// URL into BullMQ connection options. */
 const redisConnection = (url: string): ConnectionOptions => {
@@ -27,7 +28,13 @@ const worker = new Worker<ExecutionJob>(
 );
 
 worker.on('completed', (job) => console.log(`[worker] job ${job.id} completed`));
-worker.on('failed', (job, err) => console.error(`[worker] job ${job?.id} failed:`, err.message));
+worker.on('failed', (job, err) => {
+  console.error(`[worker] job ${job?.id} failed (attempt ${job?.attemptsMade}):`, err.message);
+  // Only dead-letter once retries are exhausted.
+  if (job && job.attemptsMade >= (job.opts.attempts ?? 1)) {
+    void deadLetter(job.data, err.message);
+  }
+});
 worker.on('error', (err) => console.error('[worker] worker error:', err.message));
 
 // A queue worker must survive a single bad job: a stray rejection (e.g. an RPC

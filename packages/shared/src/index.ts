@@ -65,13 +65,40 @@ export interface TriggerData {
 export interface ExecutionJob {
   workflowId: string;
   triggerData: TriggerData;
+  /**
+   * Stable key identifying the logical trigger event. The worker claims it
+   * exactly-once (Postgres unique constraint) so retries/replays don't re-run
+   * money-moving actions. Computed by the producer via {@link dedupeKeyFor}.
+   */
+  dedupeKey?: string;
+  /** Dry-run: validate + describe the actions without executing anything. */
+  dryRun?: boolean;
+}
+
+/**
+ * Derive a stable dedupe key for a (workflow, trigger event) pair. Prefers a
+ * natural on-chain identifier (tx signature, slot) so the SAME event collapses
+ * to one execution even across processes; falls back to a detection timestamp
+ * for events with no natural id (so retries of one job still share a key, but
+ * distinct detections don't collide).
+ */
+export function dedupeKeyFor(workflowId: string, data: TriggerData): string {
+  const t = data.triggerType;
+  if (typeof data.signature === 'string') return `${workflowId}:${t}:${data.signature}`;
+  if (typeof data.slot === 'number') return `${workflowId}:${t}:slot:${data.slot}`;
+  if (typeof data.scheduledAt === 'string') return `${workflowId}:${t}:${data.scheduledAt}`;
+  // Edge-triggered/price/account events: bind to the detection instant.
+  const stamp = (data.detectedAt as string) ?? new Date().toISOString();
+  return `${workflowId}:${t}:${stamp}`;
 }
 
 // ---------------------------------------------------------------------------
 // Execution result / log status
 // ---------------------------------------------------------------------------
 
-export const LOG_STATUS = ['success', 'failed', 'partial'] as const;
+// 'running' = claimed, in flight; 'skipped' = duplicate (idempotency);
+// 'dead_letter' = retries exhausted in the queue.
+export const LOG_STATUS = ['running', 'success', 'failed', 'partial', 'skipped', 'dead_letter'] as const;
 export type LogStatus = (typeof LOG_STATUS)[number];
 
 /** Result of running a single action, collected into the Log's resultData. */
