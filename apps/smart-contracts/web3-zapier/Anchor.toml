@@ -1,13 +1,17 @@
+[toolchain]
+
 [features]
-seeds = false
-[programs.localnet]
-web3_zapier = "Fg6PaFpoGXkYsidMpWTK6W2BeZ7FEfcYkg476zPFsLnS"
+resolution = true
+skip-lint = false
+
+[programs.devnet]
+web3_zapier = "3UDvaK5Xxa7JsGUF3peRzbgspk5ASUQxCQEfhibj7Rjs"
 
 [registry]
-url = "https://anchor.projectserum.com"
+url = "https://api.apr.dev"
 
 [provider]
-cluster = "localnet"
+cluster = "devnet"
 wallet = "/Users/ankit_pandey/.config/solana/id.json"
 
 [scripts]

@@ -110,10 +110,16 @@ What runs for real today vs. simulated:
   transaction. Any action without a handler is recorded as **`simulated`** (selectable + logged
   honestly; needs an on-chain signer or external protocol).
 
+  Backed by our **deployed Anchor program** (`apps/smart-contracts`, program id
+  `3UDvaK5Xxa7JsGUF3peRzbgspk5ASUQxCQEfhibj7Rjs` on devnet): `update_oracle_data` and
+  `update_contract_state` write a value to an on-chain data-feed PDA (`update_data` instruction);
+  `trigger_smart_contract` emits an on-chain `Triggered` event (`ping` instruction). The worker
+  builds these instructions directly (8-byte discriminator + Borsh args) — see
+  `apps/worker/src/anchorProgram.ts`.
+
   Still `simulated` because they need heavyweight external integrations: `create_liquidity_pool`
-  (Raydium/Orca SDK), `update_oracle_data` (a deployed oracle program — the `apps/smart-contracts`
-  Anchor program), `trigger_cross_chain_tx` (Wormhole + a destination chain), and the remaining
-  governance/contract-management actions.
+  (Raydium/Orca SDK), `trigger_cross_chain_tx` (Wormhole + a destination chain), and the remaining
+  governance / contract-deploy actions.
 
 Adding a real handler is one file + one registry line in `apps/worker/src/actions/`.
 
@@ -145,6 +151,29 @@ npm run mint:create            # 2. create a test SPL mint (prints a mint addres
 ```
 `send_tokens` needs no mint for native SOL. `transfer_nft` needs a 0-decimal mint
 (`npm run mint:create 0`) that the signer holds 1 of.
+
+## On-chain program (Anchor)
+
+`apps/smart-contracts/web3-zapier` is a real Anchor program, deployed to devnet at
+`3UDvaK5Xxa7JsGUF3peRzbgspk5ASUQxCQEfhibj7Rjs`. It backs `update_oracle_data`,
+`update_contract_state` (the `update_data` instruction → a per-authority key/value PDA) and
+`trigger_smart_contract` (the `ping` instruction → a `Triggered` event).
+
+Build & deploy (toolchain: rustc, solana-cli ≥1.18.26, `cargo-build-sbf`):
+
+```bash
+cd apps/smart-contracts/web3-zapier
+cargo-build-sbf                                   # → target/deploy/web3_zapier.so
+solana program deploy target/deploy/web3_zapier.so \
+  --program-id target/deploy/web3_zapier-keypair.json \
+  --keypair <funded-keypair.json> --url devnet    # ~1.54 SOL rent
+```
+
+Then set `WEB3_ZAPIER_PROGRAM_ID` in `apps/worker/.env` to the deployed id. The committed
+`Cargo.lock` pins several deps (`blake3`, `borsh`, `proc-macro-crate`, `indexmap`,
+`unicode-segmentation`, …) to versions compatible with the platform-tools Rust — don't bump them
+without re-verifying the SBF build. The program keypair lives in `target/` (gitignored) — back it
+up to upgrade in place later.
 
 ## REST API
 

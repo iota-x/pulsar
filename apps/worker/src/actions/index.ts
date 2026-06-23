@@ -13,6 +13,9 @@ import { burnTokens } from './burnTokens';
 import { transferNft } from './transferNft';
 import { stakeUnstake } from './stakeUnstake';
 import { executeBuySellOrder } from './executeBuySellOrder';
+import { updateOracleData } from './updateOracleData';
+import { updateContractState } from './updateContractState';
+import { triggerSmartContract } from './triggerSmartContract';
 
 /**
  * Handlers for action types that run fully off-chain today. Action types absent
@@ -34,4 +37,7 @@ export const actionHandlers: Partial<Record<ActionType, ActionHandler>> = {
   transfer_nft: transferNft,
   stake_unstake_tokens: stakeUnstake,
   execute_buy_sell_order: executeBuySellOrder,
+  update_oracle_data: updateOracleData,
+  update_contract_state: updateContractState,
+  trigger_smart_contract: triggerSmartContract,
 };
