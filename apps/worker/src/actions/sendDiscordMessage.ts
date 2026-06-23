@@ -1,4 +1,5 @@
 import type { ActionHandler } from './types';
+import { renderTemplate } from './template';
 
 /**
  * Post a message to a Discord channel via an incoming webhook URL.
@@ -7,11 +8,7 @@ import type { ActionHandler } from './types';
 export const sendDiscordMessage: ActionHandler = async (config, triggerData) => {
   if (!config.webhookUrl) throw new Error('send_discord_message: "webhookUrl" is required');
 
-  const template = config.content ?? '⚡ Workflow triggered: {triggerType}';
-  const content = template.replace(/\{(\w+)\}/g, (_, key) => {
-    const value = (triggerData as Record<string, unknown>)[key];
-    return value == null ? `{${key}}` : String(value);
-  });
+  const content = renderTemplate(config.content ?? '⚡ Workflow triggered: {triggerType}', triggerData);
 
   const res = await fetch(config.webhookUrl, {
     method: 'POST',

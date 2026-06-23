@@ -1,12 +1,14 @@
 import type { ActionHandler } from './types';
+import { renderTemplate } from './template';
 
 /**
  * Send a notification. For `channel: webhook` it POSTs to the given URL;
  * otherwise it records an in-app notification (surfaced via the execution log).
+ * The message supports `{placeholder}` tokens from the trigger data.
  */
 export const sendNotification: ActionHandler = async (config, triggerData) => {
-  const message =
-    (config.message as string) || `Workflow triggered: ${triggerData.triggerType}`;
+  const template = (config.message as string) || `Workflow triggered: {triggerType}`;
+  const message = renderTemplate(template, triggerData);
 
   if (config.channel === 'webhook') {
     if (!config.url) throw new Error('send_notification: "url" is required for webhook channel');

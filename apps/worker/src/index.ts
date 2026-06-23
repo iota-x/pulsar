@@ -28,6 +28,14 @@ const worker = new Worker<ExecutionJob>(
 
 worker.on('completed', (job) => console.log(`[worker] job ${job.id} completed`));
 worker.on('failed', (job, err) => console.error(`[worker] job ${job?.id} failed:`, err.message));
+worker.on('error', (err) => console.error('[worker] worker error:', err.message));
+
+// A queue worker must survive a single bad job: a stray rejection (e.g. an RPC
+// 429 from an on-chain action) must never take the whole process down.
+process.on('unhandledRejection', (reason) =>
+  console.error('[worker] unhandledRejection:', reason instanceof Error ? reason.message : reason),
+);
+process.on('uncaughtException', (err) => console.error('[worker] uncaughtException:', err.message));
 
 console.log('🛠️  Worker started, waiting for jobs on queue:', EXECUTION_QUEUE);
 

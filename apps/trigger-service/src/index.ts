@@ -79,6 +79,14 @@ function matches(sub: Subscription, data: TriggerData): boolean {
     const th = sub.config.threshold;
     return typeof th === 'number' && typeof data.balanceSol === 'number' && data.balanceSol < th;
   }
+
+  // Token / NFT receipts can be scoped to a specific mint.
+  const mintScoped =
+    data.triggerType === 'wallet_received_token' ||
+    data.triggerType === 'wallet_received_nft' ||
+    data.triggerType === 'airdrop_detected';
+  if (mintScoped && sub.config.mint && data.mint !== sub.config.mint) return false;
+
   if (sub.config.minAmount != null && typeof data.amount === 'number') {
     return data.amount >= sub.config.minAmount;
   }
@@ -119,6 +127,13 @@ async function main() {
     `🛰️  Watching ${walletIndex.size} wallet(s), ${scheduleTimers.size} schedule(s); refreshing every ${REFRESH_INTERVAL_MS}ms`,
   );
 }
+
+// Survive stray rejections (e.g. RPC 429s from token-account lookups) so the
+// listener keeps running instead of dying on a single bad event.
+process.on('unhandledRejection', (reason) =>
+  console.error('[trigger] unhandledRejection:', reason instanceof Error ? reason.message : reason),
+);
+process.on('uncaughtException', (err) => console.error('[trigger] uncaughtException:', err.message));
 
 main().catch((err) => {
   console.error('[trigger] fatal:', err);
