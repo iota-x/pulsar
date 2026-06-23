@@ -217,7 +217,7 @@ export default function NewWorkflowPage() {
               ))}
             </select>
             <p className="text-xs text-slate-500">{ACTION_BY_TYPE[action.type].description}</p>
-            {action.type === 'send_tokens' && (
+            {(action.type === 'send_tokens' || action.type === 'reward_user_tokens') && (
               <label className="flex items-center gap-2 rounded-xl border border-violet-400/20 bg-violet-500/[0.06] px-3 py-2 text-sm text-slate-200">
                 <input
                   type="checkbox"

@@ -1,12 +1,12 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import bs58 from 'bs58';
 import { Connection } from '@solana/web3.js';
 import { useWallet } from '@/components/WalletContext';
 import { api } from '@/lib/api';
 import type { User } from '@/lib/types';
-import { buildDelegationTx } from '@/lib/delegation';
+import { buildDelegationTx, buildRevokeTx, fetchDelegations, type DelegationInfo } from '@/lib/delegation';
 
 export default function WalletPage() {
   const connection = useMemo(
@@ -22,6 +22,8 @@ export default function WalletPage() {
   const [mint, setMint] = useState('');
   const [max, setMax] = useState('100');
   const [expiryDays, setExpiryDays] = useState('');
+  const [recipients, setRecipients] = useState('');
+  const [delegations, setDelegations] = useState<DelegationInfo[]>([]);
 
   useEffect(() => {
     api<User>('/auth/me').then(setMe).catch(() => {});
@@ -29,6 +31,36 @@ export default function WalletPage() {
 
   const connectedAddr = publicKey?.toBase58();
   const linked = me?.walletAddress && me.walletAddress === connectedAddr;
+
+  const loadDelegations = useCallback(async () => {
+    if (!publicKey) return setDelegations([]);
+    try {
+      setDelegations(await fetchDelegations(connection, publicKey));
+    } catch {
+      /* ignore */
+    }
+  }, [publicKey, connection]);
+
+  useEffect(() => {
+    void loadDelegations();
+  }, [loadDelegations]);
+
+  const revoke = async (mintAddr: string) => {
+    if (!publicKey || !sendTransaction) return;
+    setBusy('revoke:' + mintAddr);
+    setMsg(null);
+    try {
+      const tx = await buildRevokeTx(publicKey, mintAddr);
+      const sig = await sendTransaction(tx, connection);
+      await connection.confirmTransaction(sig, 'confirmed');
+      setMsg({ kind: 'ok', text: 'Delegation revoked.' });
+      await loadDelegations();
+    } catch (e) {
+      setMsg({ kind: 'err', text: e instanceof Error ? e.message : 'Revoke failed' });
+    } finally {
+      setBusy('');
+    }
+  };
 
   const linkWallet = async () => {
     if (!publicKey || !signMessage || !me) return;
@@ -61,13 +93,15 @@ export default function WalletPage() {
       const expiryUnix = expiryDays
         ? Math.floor(Date.now() / 1000) + Number(expiryDays) * 86400
         : 0;
-      const tx = await buildDelegationTx(connection, publicKey, mint.trim(), maxUi, expiryUnix);
+      const recipientList = recipients.split(',').map((r) => r.trim()).filter(Boolean);
+      const tx = await buildDelegationTx(connection, publicKey, mint.trim(), maxUi, expiryUnix, recipientList);
       const sig = await sendTransaction(tx, connection);
       await connection.confirmTransaction(sig, 'confirmed');
       setMsg({
         kind: 'ok',
-        text: `Authorized! Pulsar can now move up to ${maxUi} of this token, automatically, until you revoke.`,
+        text: `Authorized! Pulsar can now move up to ${maxUi} of this token${recipientList.length ? ` (only to ${recipientList.length} allowed recipient(s))` : ''}, until you revoke.`,
       });
+      await loadDelegations();
     } catch (e) {
       setMsg({ kind: 'err', text: e instanceof Error ? e.message : 'Authorization failed' });
     } finally {
@@ -155,11 +189,54 @@ export default function WalletPage() {
             <label className="label">Expires in (days, optional)</label>
             <input className="input" type="number" placeholder="never" value={expiryDays} onChange={(e) => setExpiryDays(e.target.value)} />
           </div>
+          <div className="sm:col-span-3">
+            <label className="label">Restrict to recipients (optional, comma-separated)</label>
+            <input className="input" placeholder="leave blank to allow any recipient — up to 5 addresses" value={recipients} onChange={(e) => setRecipients(e.target.value)} />
+            <p className="mt-1 text-xs text-slate-500">
+              For extra safety: even if Pulsar were compromised, your tokens could only go to these addresses.
+            </p>
+          </div>
         </div>
         <button onClick={authorize} disabled={!linked || busy === 'authorize'} className="btn-primary">
           {busy === 'authorize' ? 'Confirm in your wallet…' : 'Authorize (one signature)'}
         </button>
       </div>
+
+      {/* Active delegations */}
+      {connected && delegations.length > 0 && (
+        <div className="card">
+          <h2 className="font-display mb-4 text-lg font-semibold text-white">Your active delegations</h2>
+          <div className="space-y-3">
+            {delegations.map((d) => {
+              const expired = d.expiry > 0 && d.expiry * 1000 < Date.now();
+              return (
+                <div key={d.pubkey} className="rounded-xl border border-white/10 bg-black/20 p-4">
+                  <div className="flex items-start justify-between gap-4">
+                    <div className="min-w-0">
+                      <p className="font-mono text-sm text-slate-200">{d.mint.slice(0, 10)}…{d.mint.slice(-6)}</p>
+                      <p className="mt-1 text-xs text-slate-400">
+                        used {d.usedAmount.toString()} / cap {d.maxAmount.toString()} (raw units)
+                        {' · '}
+                        {d.expiry === 0 ? 'no expiry' : expired ? <span className="text-rose-400">expired</span> : `expires ${new Date(d.expiry * 1000).toLocaleDateString()}`}
+                      </p>
+                      {d.recipients.length > 0 && (
+                        <p className="mt-1 text-xs text-slate-500">restricted to {d.recipients.length} recipient(s)</p>
+                      )}
+                    </div>
+                    <button
+                      onClick={() => revoke(d.mint)}
+                      disabled={busy === 'revoke:' + d.mint}
+                      className="btn-ghost shrink-0 py-1.5 text-xs text-rose-400 hover:bg-rose-500/10"
+                    >
+                      {busy === 'revoke:' + d.mint ? 'Revoking…' : 'Revoke'}
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       <p className="text-xs text-slate-500">
         How it works: you sign one transaction that approves Pulsar&apos;s on-chain program as a

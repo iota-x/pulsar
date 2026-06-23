@@ -101,7 +101,9 @@ pub mod web3_zapier {
         max_amount: u64,
         expiry: i64,
         operator: Pubkey,
+        recipients: Vec<Pubkey>,
     ) -> Result<()> {
+        require!(recipients.len() <= MAX_RECIPIENTS, DelegationError::TooManyRecipients);
         let d = &mut ctx.accounts.delegation;
         d.owner = ctx.accounts.owner.key();
         d.mint = ctx.accounts.mint.key();
@@ -109,6 +111,7 @@ pub mod web3_zapier {
         d.max_amount = max_amount;
         d.used_amount = 0;
         d.expiry = expiry;
+        d.recipients = recipients;
         d.bump = ctx.bumps.delegation;
         emit!(DelegationCreated { owner: d.owner, mint: d.mint, operator, max_amount, expiry });
         Ok(())
@@ -134,6 +137,14 @@ pub mod web3_zapier {
             require!(data.len() >= 64, DelegationError::InvalidTokenAccount);
             require!(&data[0..32] == d.mint.as_ref(), DelegationError::InvalidTokenAccount);
             require!(&data[32..64] == d.owner.as_ref(), DelegationError::InvalidTokenAccount);
+        }
+
+        // Recipient allowlist: if set, the destination's owner must be allowed.
+        if !d.recipients.is_empty() {
+            let data = ctx.accounts.destination.try_borrow_data()?;
+            require!(data.len() >= 64, DelegationError::InvalidTokenAccount);
+            let dest_owner = Pubkey::try_from(&data[32..64]).map_err(|_| DelegationError::InvalidTokenAccount)?;
+            require!(d.recipients.contains(&dest_owner), DelegationError::RecipientNotAllowed);
         }
 
         // Hand-built SPL Token `transfer` (tag 3 + u64 amount), signed by the
@@ -317,6 +328,8 @@ pub enum GovError {
 
 // --- Delegated transfers -----------------------------------------------------
 
+pub const MAX_RECIPIENTS: usize = 5;
+
 #[account]
 pub struct Delegation {
     pub owner: Pubkey,
@@ -325,11 +338,12 @@ pub struct Delegation {
     pub max_amount: u64,
     pub used_amount: u64,
     pub expiry: i64,
+    pub recipients: Vec<Pubkey>, // empty = any recipient allowed
     pub bump: u8,
 }
 
 impl Delegation {
-    pub const SPACE: usize = 8 + 32 + 32 + 32 + 8 + 8 + 8 + 1;
+    pub const SPACE: usize = 8 + 32 + 32 + 32 + 8 + 8 + 8 + (4 + MAX_RECIPIENTS * 32) + 1;
 }
 
 #[derive(Accounts)]
@@ -403,4 +417,8 @@ pub enum DelegationError {
     CapExceeded,
     #[msg("Source token account does not match the delegation")]
     InvalidTokenAccount,
+    #[msg("Too many recipients (max 5)")]
+    TooManyRecipients,
+    #[msg("Recipient is not in the delegation's allowlist")]
+    RecipientNotAllowed,
 }
