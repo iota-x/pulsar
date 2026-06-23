@@ -44,12 +44,20 @@ export function toPublicKey(value: unknown, label: string): PublicKey {
   }
 }
 
-/** Block explorer URL for a signature on the active cluster. */
-export function explorerUrl(signature: string): string {
-  const cluster = RPC_URL.includes('devnet')
+function clusterQuery(): string {
+  return RPC_URL.includes('devnet')
     ? '?cluster=devnet'
     : RPC_URL.includes('testnet')
       ? '?cluster=testnet'
       : '';
-  return `https://explorer.solana.com/tx/${signature}${cluster}`;
+}
+
+/** Block explorer URL for a signature on the active cluster. */
+export function explorerUrl(signature: string): string {
+  return `https://explorer.solana.com/tx/${signature}${clusterQuery()}`;
+}
+
+/** Block explorer URL for an account/address on the active cluster. */
+export function explorerAddress(address: string): string {
+  return `https://explorer.solana.com/address/${address}${clusterQuery()}`;
 }

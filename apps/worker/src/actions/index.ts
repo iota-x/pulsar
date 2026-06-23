@@ -19,6 +19,11 @@ import { triggerSmartContract } from './triggerSmartContract';
 import { createLiquidityPool } from './createLiquidityPool';
 import { executeGovernanceAction } from './executeGovernanceAction';
 import { triggerCrossChainTx } from './triggerCrossChainTx';
+import { rewardUserTokens } from './rewardUserTokens';
+import { allocateFunds } from './allocateFunds';
+import { initiateCustomAction } from './initiateCustomAction';
+import { sendAlertAndRollback } from './sendAlertAndRollback';
+import { deployContract } from './deployContract';
 
 /**
  * Handlers for action types that run fully off-chain today. Action types absent
@@ -46,4 +51,9 @@ export const actionHandlers: Partial<Record<ActionType, ActionHandler>> = {
   create_liquidity_pool: createLiquidityPool,
   execute_governance_action: executeGovernanceAction,
   trigger_cross_chain_tx: triggerCrossChainTx,
+  reward_user_tokens: rewardUserTokens,
+  allocate_funds: allocateFunds,
+  initiate_custom_action: initiateCustomAction,
+  send_alert_and_rollback: sendAlertAndRollback,
+  deploy_contract: deployContract,
 };

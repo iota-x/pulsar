@@ -328,9 +328,14 @@ export const ACTION_CATALOG: CatalogEntry<ActionType>[] = [
   {
     type: 'initiate_custom_action',
     label: 'Initiate a custom action (swap / stake)',
-    description: 'Executes a custom on-chain action like swapping or staking tokens.',
+    description: 'Routes to a swap, stake, transfer, or an on-chain program call.',
     implementation: 'smart_contract',
-    fields: [programId, { key: 'instruction', label: 'Instruction', placeholder: 'e.g. swap' }, { key: 'params', label: 'Params (JSON)' }],
+    fields: [
+      { key: 'instruction', label: 'Action', type: 'select', options: ['swap', 'stake', 'unstake', 'send', 'custom'] },
+      { ...mint, label: 'Token mint (swap/send)' },
+      { key: 'to', label: 'Recipient (send)' },
+      { key: 'amount', label: 'Amount', type: 'number' },
+    ],
   },
   {
     type: 'trigger_smart_contract',
@@ -416,10 +421,10 @@ export const ACTION_CATALOG: CatalogEntry<ActionType>[] = [
   },
   {
     type: 'deploy_contract',
-    label: 'Deploy a new smart contract',
-    description: 'Deploys a new smart contract as a result of a trigger.',
+    label: 'Deploy a new contract (SPL token)',
+    description: 'Deploys a new SPL token contract (mint) with the signer as authority.',
     implementation: 'smart_contract',
-    fields: [{ key: 'programPath', label: 'Program artifact', placeholder: 'Path / URL to .so' }],
+    fields: [{ key: 'decimals', label: 'Decimals', type: 'number', placeholder: '6' }],
   },
   {
     type: 'stake_unstake_tokens',
