@@ -36,7 +36,7 @@ export default function WorkflowsPage() {
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold">Workflows</h1>
+        <h1 className="font-display text-3xl font-bold tracking-tight text-white">Workflows</h1>
         <Link href="/workflows/new" className="btn-primary">
           + New workflow
         </Link>

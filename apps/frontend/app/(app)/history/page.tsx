@@ -20,14 +20,14 @@ export default function HistoryPage() {
 
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-bold">Execution history</h1>
+      <h1 className="font-display text-3xl font-bold tracking-tight text-white">Execution history</h1>
       {error && <p className="text-rose-400">{error}</p>}
       {loading ? (
         <p className="text-slate-400">Loading…</p>
       ) : logs.length === 0 ? (
         <div className="card text-sm text-slate-400">No executions recorded yet.</div>
       ) : (
-        <div className="card divide-y divide-slate-800 p-0">
+        <div className="card divide-y divide-white/[0.06] p-0">
           {logs.map((log) => (
             <div key={log.id} className="flex items-center justify-between px-5 py-3">
               <div>

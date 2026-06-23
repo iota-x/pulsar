@@ -63,7 +63,7 @@ export default function WorkflowDetailPage() {
     <div className="space-y-8">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold">{wf.name}</h1>
+          <h1 className="font-display text-3xl font-bold tracking-tight text-white">{wf.name}</h1>
           {wf.description && <p className="text-sm text-slate-400">{wf.description}</p>}
         </div>
         <div className="flex gap-2">

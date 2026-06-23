@@ -6,11 +6,22 @@ import { api } from '@/lib/api';
 import type { DashboardStats } from '@/lib/types';
 import { StatusBadge } from '@/components/StatusBadge';
 
-function StatCard({ label, value, accent }: { label: string; value: number; accent?: string }) {
+function StatCard({
+  label,
+  value,
+  accent,
+  bar,
+}: {
+  label: string;
+  value: number;
+  accent?: string;
+  bar: string;
+}) {
   return (
-    <div className="card">
+    <div className="card card-hover relative overflow-hidden">
+      <div className={`absolute inset-x-0 top-0 h-px ${bar}`} />
       <p className="text-sm text-slate-400">{label}</p>
-      <p className={`mt-2 text-3xl font-bold ${accent ?? ''}`}>{value}</p>
+      <p className={`font-display mt-3 text-4xl font-bold ${accent ?? 'text-white'}`}>{value}</p>
     </div>
   );
 }
@@ -29,26 +40,29 @@ export default function DashboardPage() {
   return (
     <div className="space-y-8">
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold">Dashboard</h1>
+        <div>
+          <h1 className="font-display text-3xl font-bold tracking-tight text-white">Dashboard</h1>
+          <p className="mt-1 text-sm text-slate-400">Your automations at a glance.</p>
+        </div>
         <Link href="/workflows/new" className="btn-primary">
           + New workflow
         </Link>
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        <StatCard label="Total workflows" value={stats.totalWorkflows} />
-        <StatCard label="Active workflows" value={stats.activeWorkflows} accent="text-emerald-400" />
-        <StatCard label="Failed executions" value={stats.failedExecutions} accent="text-rose-400" />
+        <StatCard label="Total workflows" value={stats.totalWorkflows} bar="bg-gradient-to-r from-violet-500/0 via-violet-500/60 to-violet-500/0" />
+        <StatCard label="Active workflows" value={stats.activeWorkflows} accent="text-emerald-300" bar="bg-gradient-to-r from-emerald-500/0 via-emerald-500/60 to-emerald-500/0" />
+        <StatCard label="Failed executions" value={stats.failedExecutions} accent="text-rose-300" bar="bg-gradient-to-r from-rose-500/0 via-rose-500/60 to-rose-500/0" />
       </div>
 
       <div>
-        <h2 className="mb-3 text-lg font-semibold">Recent executions</h2>
+        <h2 className="font-display mb-3 text-lg font-semibold text-white">Recent executions</h2>
         {stats.recentExecutions.length === 0 ? (
           <div className="card text-sm text-slate-400">
             No executions yet. Create a workflow and trigger it to see activity here.
           </div>
         ) : (
-          <div className="card divide-y divide-slate-800 p-0">
+          <div className="card divide-y divide-white/[0.06] p-0">
             {stats.recentExecutions.map((log) => (
               <div key={log.id} className="flex items-center justify-between px-5 py-3">
                 <div>

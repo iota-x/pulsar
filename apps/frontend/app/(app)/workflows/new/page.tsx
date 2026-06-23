@@ -140,7 +140,7 @@ export default function NewWorkflowPage() {
 
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-bold">New workflow</h1>
+      <h1 className="font-display text-3xl font-bold tracking-tight text-white">New workflow</h1>
 
       {/* Metadata */}
       <div className="card space-y-4">
