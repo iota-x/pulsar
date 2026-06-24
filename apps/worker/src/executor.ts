@@ -5,6 +5,7 @@ import {
   type LogStatus,
   isActionType,
   dedupeKeyFor,
+  planAction,
   ACTION_BY_TYPE,
 } from '@web3-zapier/shared';
 import prisma from './prisma';
@@ -142,15 +143,6 @@ export async function executeWorkflow(job: ExecutionJob): Promise<void> {
 
 /** Describe what an action WOULD do, for dry-run plans (no execution). */
 function describeAction(actionId: string, type: string, config: unknown): ActionResult {
-  if (!isActionType(type)) {
-    return { actionId, type: type as never, status: 'failed', detail: 'Unknown action type' };
-  }
-  const entry = ACTION_BY_TYPE[type];
-  const required = entry.fields.filter((f) => f.required).map((f) => f.key);
-  const cfg = (config as Record<string, unknown>) ?? {};
-  const missing = required.filter((k) => cfg[k] === undefined || cfg[k] === '');
-  if (missing.length > 0) {
-    return { actionId, type, status: 'failed', detail: `Missing required: ${missing.join(', ')}` };
-  }
-  return { actionId, type, status: 'simulated', detail: `Would ${entry.label.toLowerCase()}` };
+  const p = planAction(type, (config as Record<string, unknown>) ?? {});
+  return { actionId, type: p.type as ActionResult['type'], status: p.status, detail: p.detail };
 }

@@ -574,3 +574,29 @@ export const WORKFLOW_TEMPLATES: WorkflowTemplate[] = [
 ];
 
 export const TEMPLATE_BY_ID = Object.fromEntries(WORKFLOW_TEMPLATES.map((t) => [t.id, t])) as Record<string, WorkflowTemplate>;
+
+// ---------------------------------------------------------------------------
+// Action planning (dry-run) — shared by the API simulate endpoint and worker.
+// ---------------------------------------------------------------------------
+
+export interface ActionPlanItem {
+  type: string;
+  status: 'simulated' | 'failed';
+  detail: string;
+}
+
+/**
+ * Validate an action's required config and describe what it WOULD do — pure,
+ * no side effects. Used by both the synchronous /simulate endpoint and the
+ * worker's dry-run path so they can never diverge.
+ */
+export function planAction(type: string, config: Record<string, unknown>): ActionPlanItem {
+  if (!isActionType(type)) return { type, status: 'failed', detail: 'Unknown action type' };
+  const entry = ACTION_BY_TYPE[type];
+  const missing = entry.fields
+    .filter((f) => f.required)
+    .map((f) => f.key)
+    .filter((k) => config[k] === undefined || config[k] === '');
+  if (missing.length > 0) return { type, status: 'failed', detail: `Missing required: ${missing.join(', ')}` };
+  return { type, status: 'simulated', detail: `Would ${entry.label.toLowerCase()}` };
+}

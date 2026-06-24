@@ -15,7 +15,9 @@
     "dev:trigger": "npm run dev --workspace=trigger-service",
     "dev:frontend": "npm run dev --workspace=frontend",
     "fund:signer": "node scripts/fund-signer.cjs",
-    "mint:create": "node scripts/create-test-mint.cjs"
+    "mint:create": "node scripts/create-test-mint.cjs",
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "overrides": {
     "ioredis": "5.10.1",
@@ -28,7 +30,8 @@
     "react": "18.3.1",
     "react-dom": "18.3.1",
     "turbo": "^2.0.12",
-    "typescript": "^5.4.5"
+    "typescript": "^5.4.5",
+    "vitest": "^1.6.1"
   },
   "engines": {
     "node": ">=18"

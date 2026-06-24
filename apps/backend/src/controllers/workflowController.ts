@@ -5,7 +5,7 @@ import { asyncHandler, AppError } from '../middlewares/errorHandler';
 import { createWorkflowSchema, updateWorkflowSchema } from '../validation/schemas';
 import { AuthedRequest } from '../middlewares/authMiddleware';
 import { enqueueExecution } from '../lib/queue';
-import { isActionType, ACTION_BY_TYPE } from '@web3-zapier/shared';
+import { planAction } from '@web3-zapier/shared';
 
 export const createWorkflow = asyncHandler(async (req: AuthedRequest, res: Response) => {
   const input = createWorkflowSchema.parse(req.body);
@@ -66,18 +66,9 @@ export const simulateWorkflow = asyncHandler(async (req: AuthedRequest, res: Res
   const workflow = await workflowService.getWorkflowById(req.params.id, req.userId!);
   if (!workflow) throw new AppError('Workflow not found', 404);
 
-  const plan = (workflow.actions ?? []).map((action) => {
-    if (!isActionType(action.type)) {
-      return { type: action.type, status: 'failed' as const, detail: 'Unknown action type' };
-    }
-    const entry = ACTION_BY_TYPE[action.type];
-    const cfg = (action.config as Record<string, unknown>) ?? {};
-    const missing = entry.fields.filter((f) => f.required).map((f) => f.key).filter((k) => cfg[k] === undefined || cfg[k] === '');
-    if (missing.length > 0) {
-      return { type: action.type, status: 'failed' as const, detail: `Missing required: ${missing.join(', ')}` };
-    }
-    return { type: action.type, status: 'simulated' as const, detail: `Would ${entry.label.toLowerCase()}` };
-  });
+  const plan = (workflow.actions ?? []).map((action) =>
+    planAction(action.type, (action.config as Record<string, unknown>) ?? {}),
+  );
 
   res.status(200).json({
     workflowId: workflow.id,
