@@ -1,11 +1,13 @@
 import 'dotenv/config';
-import { type TriggerConfig, type TriggerData, isTriggerType } from '@web3-zapier/shared';
+import { type TriggerConfig, type TriggerData, isTriggerType, solanaWsUrl } from '@web3-zapier/shared';
 import prisma from './prisma';
 import { enqueueExecution } from './queue';
 import { SolanaWatcher, type DetectedEvent } from './watcher';
 
 const RPC_URL = process.env.SOLANA_RPC_URL ?? 'https://api.devnet.solana.com';
-const WS_URL = process.env.SOLANA_WS_URL ?? 'wss://api.devnet.solana.com';
+// WS follows the RPC unless explicitly overridden — so a dedicated RPC needs
+// only SOLANA_RPC_URL set.
+const WS_URL = solanaWsUrl(RPC_URL, process.env.SOLANA_WS_URL);
 const REFRESH_INTERVAL_MS = Number(process.env.REFRESH_INTERVAL_MS ?? 15000);
 const PRICE_POLL_MS = Number(process.env.PRICE_POLL_MS ?? 30000);
 const JUPITER_PRICE_API = process.env.JUPITER_PRICE_API ?? 'https://api.jup.ag/price/v2';

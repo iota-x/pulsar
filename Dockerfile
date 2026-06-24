@@ -19,9 +19,16 @@ RUN npm install
 RUN npm run db:generate
 
 # Build the Next.js frontend. NEXT_PUBLIC_* are inlined at build time, so the
-# public API URL must be known here (passed as a build arg from compose).
+# public API URL, RPC, and program/operator must be known here (passed as build
+# args from compose). Defaults target devnet.
 ARG NEXT_PUBLIC_API_URL=http://localhost:4000
+ARG NEXT_PUBLIC_SOLANA_RPC=https://api.devnet.solana.com
+ARG NEXT_PUBLIC_PROGRAM_ID=3UDvaK5Xxa7JsGUF3peRzbgspk5ASUQxCQEfhibj7Rjs
+ARG NEXT_PUBLIC_OPERATOR_PUBKEY=FgCiArPJfe9YCfW8Gioo87uoG7M9zXiPg8JvJHK3uTtJ
 ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
+ENV NEXT_PUBLIC_SOLANA_RPC=$NEXT_PUBLIC_SOLANA_RPC
+ENV NEXT_PUBLIC_PROGRAM_ID=$NEXT_PUBLIC_PROGRAM_ID
+ENV NEXT_PUBLIC_OPERATOR_PUBKEY=$NEXT_PUBLIC_OPERATOR_PUBKEY
 ENV NODE_ENV=production
 RUN npm run build --workspace=frontend
 

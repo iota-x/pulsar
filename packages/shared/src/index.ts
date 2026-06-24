@@ -52,6 +52,17 @@ export interface ActionConfig {
 /** Name of the BullMQ queue shared by the trigger service and the worker. */
 export const EXECUTION_QUEUE = 'workflow-execution';
 
+/**
+ * Resolve the Solana websocket endpoint. Prefer an explicit override (some
+ * providers use a different ws host); otherwise derive it from the RPC URL
+ * (https→wss, http→ws). This lets a dedicated RPC be configured with a single
+ * `SOLANA_RPC_URL` and have subscriptions follow automatically.
+ */
+export function solanaWsUrl(rpcUrl: string, explicit?: string): string {
+  if (explicit && explicit.trim()) return explicit.trim();
+  return rpcUrl.replace(/^http(s?):\/\//i, (_m, s) => `ws${s}://`);
+}
+
 /** Data the trigger service detected on-chain, passed through to the actions. */
 export interface TriggerData {
   triggerType: TriggerType;

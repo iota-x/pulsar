@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   dedupeKeyFor,
   planAction,
+  solanaWsUrl,
   WORKFLOW_TEMPLATES,
   TRIGGER_BY_TYPE,
   ACTION_BY_TYPE,
@@ -9,6 +10,21 @@ import {
   isActionType,
   type TriggerData,
 } from '../index';
+
+describe('solanaWsUrl', () => {
+  it('derives wss from an https RPC', () => {
+    expect(solanaWsUrl('https://devnet.helius-rpc.com/?api-key=abc')).toBe('wss://devnet.helius-rpc.com/?api-key=abc');
+  });
+  it('derives ws from an http RPC', () => {
+    expect(solanaWsUrl('http://localhost:8899')).toBe('ws://localhost:8899');
+  });
+  it('prefers an explicit override', () => {
+    expect(solanaWsUrl('https://a.com', 'wss://custom-ws.com')).toBe('wss://custom-ws.com');
+  });
+  it('ignores a blank override', () => {
+    expect(solanaWsUrl('https://a.com', '   ')).toBe('wss://a.com');
+  });
+});
 
 describe('dedupeKeyFor', () => {
   const wf = 'wf_123';

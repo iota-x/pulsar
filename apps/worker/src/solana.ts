@@ -1,9 +1,15 @@
 import { Connection, Keypair, PublicKey } from '@solana/web3.js';
 import bs58 from 'bs58';
+import { solanaWsUrl } from '@web3-zapier/shared';
 
 export const RPC_URL = process.env.SOLANA_RPC_URL ?? 'https://api.devnet.solana.com';
 
-export const connection = new Connection(RPC_URL, 'confirmed');
+// Pin the ws endpoint to (a derivative of) the RPC so a dedicated provider is
+// used for subscriptions too, not just HTTP calls.
+export const connection = new Connection(RPC_URL, {
+  commitment: 'confirmed',
+  wsEndpoint: solanaWsUrl(RPC_URL, process.env.SOLANA_WS_URL),
+});
 
 let signer: Keypair | null | undefined;
 
