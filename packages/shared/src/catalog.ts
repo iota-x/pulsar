@@ -508,3 +508,69 @@ export const isTriggerType = (v: unknown): v is TriggerType =>
 
 export const isActionType = (v: unknown): v is ActionType =>
   typeof v === 'string' && v in ACTION_BY_TYPE;
+
+// ---------------------------------------------------------------------------
+// Workflow templates — prebuilt recipes to lower the onboarding cliff.
+// ---------------------------------------------------------------------------
+
+export interface WorkflowTemplate {
+  id: string;
+  name: string;
+  description: string;
+  category: string;
+  trigger: { type: TriggerType; config: Record<string, string> };
+  actions: { type: ActionType; config: Record<string, string> }[];
+}
+
+export const WORKFLOW_TEMPLATES: WorkflowTemplate[] = [
+  {
+    id: 'whale-watch',
+    name: 'Whale wallet alert',
+    description: 'Ping Discord whenever a watched wallet receives a large SOL transfer.',
+    category: 'Monitoring',
+    trigger: { type: 'wallet_received_sol', config: { minAmount: '100' } },
+    actions: [{ type: 'send_discord_message', config: { content: '🐋 Whale move: {{wallet}} received {{amount}} SOL' } }],
+  },
+  {
+    id: 'price-alert',
+    name: 'Token price alert',
+    description: 'Get notified the moment a token crosses your target price.',
+    category: 'Trading',
+    trigger: { type: 'token_price_threshold', config: { direction: 'above' } },
+    actions: [{ type: 'send_discord_message', config: { content: '📈 {{mint}} crossed {{targetPrice}} (now {{price}})' } }],
+  },
+  {
+    id: 'auto-forward',
+    name: 'Auto-forward incoming tokens',
+    description: 'When your wallet receives a token, forward it on automatically (delegated, capped).',
+    category: 'Automation',
+    trigger: { type: 'wallet_received_token', config: {} },
+    actions: [{ type: 'send_tokens', config: { useDelegation: 'true' } }],
+  },
+  {
+    id: 'low-balance',
+    name: 'Low balance warning',
+    description: 'Alert by email when a wallet balance drops below a threshold.',
+    category: 'Monitoring',
+    trigger: { type: 'wallet_balance_below_threshold', config: { threshold: '1' } },
+    actions: [{ type: 'send_email', config: { subject: 'Low balance', body: 'Wallet {{wallet}} is below threshold.' } }],
+  },
+  {
+    id: 'nft-mint-watch',
+    name: 'NFT mint tracker',
+    description: 'Log every mint from a collection you care about.',
+    category: 'NFTs',
+    trigger: { type: 'nft_minted', config: {} },
+    actions: [{ type: 'store_log', config: {} }],
+  },
+  {
+    id: 'dca-buy',
+    name: 'Scheduled DCA buy',
+    description: 'Dollar-cost average: buy a token on a fixed schedule (delegated, mainnet).',
+    category: 'Trading',
+    trigger: { type: 'scheduled_time', config: { intervalSeconds: '86400' } },
+    actions: [{ type: 'execute_buy_sell_order', config: { side: 'buy', useDelegation: 'true' } }],
+  },
+];
+
+export const TEMPLATE_BY_ID = Object.fromEntries(WORKFLOW_TEMPLATES.map((t) => [t.id, t])) as Record<string, WorkflowTemplate>;

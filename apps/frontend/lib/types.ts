@@ -9,6 +9,8 @@ export {
   ACTION_BY_TYPE,
   TRIGGER_LABELS,
   ACTION_LABELS,
+  WORKFLOW_TEMPLATES,
+  TEMPLATE_BY_ID,
 } from '@web3-zapier/shared';
 export type {
   TriggerType,
@@ -16,6 +18,7 @@ export type {
   Implementation,
   CatalogEntry,
   CatalogField,
+  WorkflowTemplate,
 } from '@web3-zapier/shared';
 
 import type { TriggerType, ActionType } from '@web3-zapier/shared';

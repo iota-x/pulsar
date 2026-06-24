@@ -31,6 +31,7 @@ export default function WorkflowDetailPage() {
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [error, setError] = useState('');
   const [msg, setMsg] = useState('');
+  const [plan, setPlan] = useState<{ ok: boolean; plan: { type: string; status: string; detail?: string }[] } | null>(null);
 
   const load = () => {
     api<Workflow>(`/workflows/${id}`).then(setWf).catch((e) => setError(e.message));
@@ -43,6 +44,16 @@ export default function WorkflowDetailPage() {
     await api(`/workflows/${id}/run`, { method: 'POST', body: JSON.stringify({}) });
     setMsg('Execution enqueued — refresh history in a moment.');
     setTimeout(load, 1500);
+  };
+
+  const simulate = async () => {
+    setMsg('');
+    setPlan(null);
+    const result = await api<{ ok: boolean; plan: { type: string; status: string; detail?: string }[] }>(
+      `/workflows/${id}/simulate`,
+      { method: 'POST', body: JSON.stringify({}) },
+    );
+    setPlan(result);
   };
 
   const remove = async () => {
@@ -67,6 +78,9 @@ export default function WorkflowDetailPage() {
           {wf.description && <p className="text-sm text-slate-400">{wf.description}</p>}
         </div>
         <div className="flex gap-2">
+          <button onClick={simulate} className="btn-ghost">
+            🧪 Test (dry-run)
+          </button>
           <button onClick={run} className="btn-primary">
             ▶ Run now
           </button>
@@ -77,6 +91,26 @@ export default function WorkflowDetailPage() {
       </div>
 
       {msg && <p className="text-sm text-emerald-400">{msg}</p>}
+
+      {plan && (
+        <div className="card space-y-2">
+          <div className="flex items-center justify-between">
+            <h2 className="font-semibold">Dry-run plan</h2>
+            <span className={`text-sm ${plan.ok ? 'text-emerald-400' : 'text-rose-400'}`}>
+              {plan.ok ? '✓ All actions valid — nothing executed' : '✗ Fix the issues below'}
+            </span>
+          </div>
+          <ul className="space-y-1.5 text-sm">
+            {plan.plan.map((p, i) => (
+              <li key={i} className="flex items-center gap-2">
+                <StatusBadge status={p.status} />
+                <span className="text-slate-300">{ACTION_LABELS[p.type as ActionType] ?? p.type}</span>
+                {p.detail && <span className="text-slate-500">— {p.detail}</span>}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
 
       {/* Visual flow */}
       <div className="flex flex-col items-center gap-2">

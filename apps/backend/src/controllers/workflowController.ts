@@ -5,6 +5,7 @@ import { asyncHandler, AppError } from '../middlewares/errorHandler';
 import { createWorkflowSchema, updateWorkflowSchema } from '../validation/schemas';
 import { AuthedRequest } from '../middlewares/authMiddleware';
 import { enqueueExecution } from '../lib/queue';
+import { isActionType, ACTION_BY_TYPE } from '@web3-zapier/shared';
 
 export const createWorkflow = asyncHandler(async (req: AuthedRequest, res: Response) => {
   const input = createWorkflowSchema.parse(req.body);
@@ -54,6 +55,36 @@ export const runWorkflow = asyncHandler(async (req: AuthedRequest, res: Response
     },
   });
   res.status(202).json({ message: 'Workflow execution enqueued' });
+});
+
+/**
+ * Dry-run: validate each action's required config and describe what it WOULD do,
+ * synchronously and without touching the chain or external services. Lets users
+ * sanity-check a workflow before arming it.
+ */
+export const simulateWorkflow = asyncHandler(async (req: AuthedRequest, res: Response) => {
+  const workflow = await workflowService.getWorkflowById(req.params.id, req.userId!);
+  if (!workflow) throw new AppError('Workflow not found', 404);
+
+  const plan = (workflow.actions ?? []).map((action) => {
+    if (!isActionType(action.type)) {
+      return { type: action.type, status: 'failed' as const, detail: 'Unknown action type' };
+    }
+    const entry = ACTION_BY_TYPE[action.type];
+    const cfg = (action.config as Record<string, unknown>) ?? {};
+    const missing = entry.fields.filter((f) => f.required).map((f) => f.key).filter((k) => cfg[k] === undefined || cfg[k] === '');
+    if (missing.length > 0) {
+      return { type: action.type, status: 'failed' as const, detail: `Missing required: ${missing.join(', ')}` };
+    }
+    return { type: action.type, status: 'simulated' as const, detail: `Would ${entry.label.toLowerCase()}` };
+  });
+
+  res.status(200).json({
+    workflowId: workflow.id,
+    triggerType: workflow.trigger?.type ?? null,
+    ok: plan.every((p) => p.status !== 'failed'),
+    plan,
+  });
 });
 
 export const getDashboard = asyncHandler(async (req: AuthedRequest, res: Response) => {

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { api } from '@/lib/api';
 import {
@@ -8,6 +8,7 @@ import {
   ACTION_CATALOG,
   TRIGGER_BY_TYPE,
   ACTION_BY_TYPE,
+  TEMPLATE_BY_ID,
   type TriggerType,
   type ActionType,
   type Implementation,
@@ -89,6 +90,18 @@ export default function NewWorkflowPage() {
   ]);
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
+
+  // Prefill from a template (?template=<id>) — one-click recipe start.
+  useEffect(() => {
+    const id = new URLSearchParams(window.location.search).get('template');
+    const tpl = id ? TEMPLATE_BY_ID[id] : undefined;
+    if (!tpl) return;
+    setName(tpl.name);
+    setDescription(tpl.description);
+    setTriggerType(tpl.trigger.type);
+    setTriggerConfig({ ...tpl.trigger.config });
+    setActions(tpl.actions.map((a) => ({ type: a.type, config: { ...a.config } })));
+  }, []);
 
   const setTriggerField = (key: string, value: string) =>
     setTriggerConfig((c) => ({ ...c, [key]: value }));

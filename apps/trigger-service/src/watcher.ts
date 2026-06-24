@@ -1,6 +1,7 @@
 import { Connection, PublicKey } from '@solana/web3.js';
 import { TOKEN_PROGRAM_ID, unpackAccount, getMint } from '@solana/spl-token';
 import type { TriggerData } from '@web3-zapier/shared';
+import { getCursor, setCursor } from './cursor';
 
 export type DetectedEvent = { target: string; data: TriggerData & { kind: string } };
 type EventHandler = (event: DetectedEvent) => void;
@@ -132,17 +133,53 @@ export class SolanaWatcher {
 
     const logSub = this.connection.onLogs(pubkey, (logs) => {
       if (logs.err) return;
-      this.onEvent({ target: wallet, data: { triggerType: 'transaction_confirmed', kind: 'wallet', wallet, signature: logs.signature } });
-      // A swap if any line references a known DEX program.
-      if (logs.logs.some((line) => DEX_PROGRAMS.some((p) => line.includes(p)))) {
-        this.onEvent({ target: wallet, data: { triggerType: 'token_swap_executed', kind: 'wallet', wallet, signature: logs.signature } });
-      }
+      void setCursor(wallet, logs.signature);
+      this.emitWalletTx(wallet, logs.signature, logs.logs);
     });
 
     await this.subscribeTokens(wallet, pubkey);
     this.accountSubs.set(wallet, accountSub);
     this.logSubs.set(wallet, logSub);
+    // Replay any transactions missed while we were down (deduped downstream).
+    await this.backfill(wallet, pubkey, (sig, lines) => this.emitWalletTx(wallet, sig, lines));
     console.log(`[watcher] subscribed wallet ${wallet}`);
+  }
+
+  /** Emit the transaction-level events for a wallet signature (live or backfill). */
+  private emitWalletTx(wallet: string, signature: string, lines: string[]): void {
+    this.onEvent({ target: wallet, data: { triggerType: 'transaction_confirmed', kind: 'wallet', wallet, signature } });
+    // A swap if any line references a known DEX program.
+    if (lines.some((line) => DEX_PROGRAMS.some((p) => line.includes(p)))) {
+      this.onEvent({ target: wallet, data: { triggerType: 'token_swap_executed', kind: 'wallet', wallet, signature } });
+    }
+  }
+
+  /**
+   * Replay transactions that occurred since the persisted cursor (a missed
+   * window during downtime). Fetches signatures newer than the cursor and
+   * re-emits them oldest-first; the worker's exactly-once claim drops any that
+   * were already processed, so this is safe and idempotent.
+   */
+  private async backfill(target: string, pubkey: PublicKey, emit: (sig: string, lines: string[]) => void): Promise<void> {
+    try {
+      const cursor = await getCursor(target);
+      const sigs = await this.connection.getSignaturesForAddress(pubkey, { until: cursor ?? undefined, limit: 50 });
+      if (sigs.length === 0) return;
+      // First run (no cursor): just set the high-water mark, don't replay history.
+      if (!cursor) {
+        await setCursor(target, sigs[0].signature);
+        return;
+      }
+      const missed = sigs.filter((s) => !s.err).reverse(); // oldest → newest
+      for (const s of missed) {
+        const tx = await this.connection.getTransaction(s.signature, { maxSupportedTransactionVersion: 0 });
+        emit(s.signature, tx?.meta?.logMessages ?? []);
+      }
+      await setCursor(target, sigs[0].signature);
+      if (missed.length) console.log(`[watcher] backfilled ${missed.length} missed tx for ${target}`);
+    } catch (err) {
+      console.warn(`[watcher] backfill failed for ${target}:`, err instanceof Error ? err.message : err);
+    }
   }
 
   /** On a SOL receipt, resolve the sender so wallet_funded_by_address can match. */
@@ -240,18 +277,22 @@ export class SolanaWatcher {
       console.warn(`[watcher] invalid programId, skipping: ${programId}`);
       return;
     }
-    const sub = this.connection.onLogs(pubkey, (logs) => {
+    const emit = (signature: string, err: boolean) =>
       this.onEvent({
         target: programId,
         data: {
           triggerType: 'contract_event_emitted',
-          kind: logs.err ? 'program_failed' : 'program_success',
+          kind: err ? 'program_failed' : 'program_success',
           programId,
-          signature: logs.signature,
+          signature,
         },
       });
+    const sub = this.connection.onLogs(pubkey, (logs) => {
+      void setCursor(programId, logs.signature);
+      emit(logs.signature, !!logs.err);
     });
     this.programSubs.set(programId, sub);
+    await this.backfill(programId, pubkey, (sig) => emit(sig, false));
     console.log(`[watcher] subscribed program ${programId}`);
   }
 
