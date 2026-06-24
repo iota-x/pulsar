@@ -17,43 +17,49 @@ import {
 import { getAllLogs, getLogsByWorkflowId } from './controllers/logController';
 import { errorHandler } from './middlewares/errorHandler';
 import { authMiddleware } from './middlewares/authMiddleware';
-import { authLimiter, apiLimiter } from './middlewares/rateLimit';
+import { apiLimiter, actionLimiter, loginLimiter, registerLimiter } from './middlewares/rateLimit';
 
 const app = express();
-app.set('trust proxy', 1); // behind Caddy/Nginx — needed for correct client IPs
-app.use(cors({ origin: config.corsOrigin }));
+// Trust proxy hops (Tailscale Funnel / Caddy / Nginx) so req.ip reflects the real
+// client. Tune TRUST_PROXY to the actual hop count if IP-based limits look off.
+app.set('trust proxy', Number(process.env.TRUST_PROXY ?? 1));
+app.use(cors({ origin: config.corsOrigin.split(',').map((o) => o.trim()) }));
 app.use(express.json());
-app.use(apiLimiter);
 
 app.get('/health', (_req, res) => res.json({ status: 'ok' }));
 
 // Prebuilt workflow recipes (public — no user data).
 app.get('/templates', (_req, res) => res.json(WORKFLOW_TEMPLATES));
 
+// Authed routes: authenticate first, then rate-limit per user (robust behind a
+// proxy that may collapse client IPs).
+const authed = [authMiddleware, apiLimiter];
+const authedAction = [authMiddleware, actionLimiter];
+
 // --- Auth (public, rate-limited) ---
-app.post('/auth/register', authLimiter, registerUser);
-app.post('/auth/login', authLimiter, loginUser);
+app.post('/auth/register', registerLimiter, registerUser);
+app.post('/auth/login', loginLimiter, loginUser);
 
 // --- Auth (protected) ---
-app.get('/auth/me', authMiddleware, getMe);
-app.post('/auth/wallet', authMiddleware, linkWallet);
+app.get('/auth/me', ...authed, getMe);
+app.post('/auth/wallet', ...authed, linkWallet);
 
 // --- Dashboard ---
-app.get('/dashboard', authMiddleware, getDashboard);
+app.get('/dashboard', ...authed, getDashboard);
 
 // --- Workflows (trigger + actions managed inline) ---
-app.post('/workflows', authMiddleware, createWorkflow);
-app.get('/workflows', authMiddleware, getAllWorkflows);
-app.get('/workflows/:id', authMiddleware, getWorkflowById);
-app.put('/workflows/:id', authMiddleware, updateWorkflow);
-app.patch('/workflows/:id/active', authMiddleware, toggleWorkflow);
-app.post('/workflows/:id/run', authMiddleware, runWorkflow);
-app.post('/workflows/:id/simulate', authMiddleware, simulateWorkflow);
-app.delete('/workflows/:id', authMiddleware, deleteWorkflow);
+app.post('/workflows', ...authed, createWorkflow);
+app.get('/workflows', ...authed, getAllWorkflows);
+app.get('/workflows/:id', ...authed, getWorkflowById);
+app.put('/workflows/:id', ...authed, updateWorkflow);
+app.patch('/workflows/:id/active', ...authed, toggleWorkflow);
+app.post('/workflows/:id/run', ...authedAction, runWorkflow);
+app.post('/workflows/:id/simulate', ...authedAction, simulateWorkflow);
+app.delete('/workflows/:id', ...authed, deleteWorkflow);
 
 // --- Execution logs ---
-app.get('/logs', authMiddleware, getAllLogs);
-app.get('/logs/:workflowId', authMiddleware, getLogsByWorkflowId);
+app.get('/logs', ...authed, getAllLogs);
+app.get('/logs/:workflowId', ...authed, getLogsByWorkflowId);
 
 app.use(errorHandler);
 

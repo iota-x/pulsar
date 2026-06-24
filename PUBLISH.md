@@ -60,7 +60,9 @@ tailscale funnel --https=8443 off
   stack up; `tailscale funnel --bg` persists as a background service.
 - **Fresh database:** this stack has its own internal Postgres volume — it starts
   empty; register a new account.
-- **Rate limiting behind Funnel:** all traffic arrives via the local Tailscale proxy,
-  so per-IP rate limiting may behave globally rather than per-visitor. Fine for a demo;
-  revisit if you expect real load.
+- **Rate limiting** is Redis-backed and keyed per **user** on authed routes and per
+  **email** on login — so it stays per-visitor even if the proxy collapses client IPs.
+  Only registration is IP-keyed; if IP-based limits look off behind Funnel, set
+  `TRUST_PROXY` in `.env` to the real number of proxy hops (default 1) and restart the
+  backend.
 - **Funnel is for reasonable personal/demo use** — it is not a CDN.
