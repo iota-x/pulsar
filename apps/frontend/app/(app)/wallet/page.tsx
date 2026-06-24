@@ -8,6 +8,16 @@ import { api } from '@/lib/api';
 import type { User } from '@/lib/types';
 import { buildDelegationTx, buildWrapAndDelegateTx, buildRevokeTx, fetchDelegations, type DelegationInfo } from '@/lib/delegation';
 
+const PERIOD_OPTIONS: { label: string; seconds: number }[] = [
+  { label: 'Total (lifetime cap)', seconds: 0 },
+  { label: 'Per hour', seconds: 3600 },
+  { label: 'Per day', seconds: 86400 },
+  { label: 'Per week', seconds: 604800 },
+];
+
+const periodLabel = (seconds: number): string =>
+  PERIOD_OPTIONS.find((p) => p.seconds === seconds)?.label.replace(/^Per /, '').toLowerCase() ?? `${seconds}s`;
+
 export default function WalletPage() {
   const connection = useMemo(
     () => new Connection(process.env.NEXT_PUBLIC_SOLANA_RPC ?? 'https://api.devnet.solana.com', 'confirmed'),
@@ -24,6 +34,7 @@ export default function WalletPage() {
   const [expiryDays, setExpiryDays] = useState('');
   const [recipients, setRecipients] = useState('');
   const [solMode, setSolMode] = useState(false);
+  const [period, setPeriod] = useState('0'); // 0 = lifetime cap; else seconds
   const [delegations, setDelegations] = useState<DelegationInfo[]>([]);
 
   useEffect(() => {
@@ -95,14 +106,16 @@ export default function WalletPage() {
         ? Math.floor(Date.now() / 1000) + Number(expiryDays) * 86400
         : 0;
       const recipientList = recipients.split(',').map((r) => r.trim()).filter(Boolean);
+      const periodSeconds = Number(period) || 0;
       const tx = solMode
-        ? await buildWrapAndDelegateTx(connection, publicKey, maxUi, expiryUnix, recipientList)
-        : await buildDelegationTx(connection, publicKey, mint.trim(), maxUi, expiryUnix, recipientList);
+        ? await buildWrapAndDelegateTx(connection, publicKey, maxUi, expiryUnix, recipientList, periodSeconds)
+        : await buildDelegationTx(connection, publicKey, mint.trim(), maxUi, expiryUnix, recipientList, periodSeconds);
       const sig = await sendTransaction(tx, connection);
       await connection.confirmTransaction(sig, 'confirmed');
+      const capPhrase = periodSeconds > 0 ? `up to ${maxUi} per ${periodLabel(periodSeconds)}` : `up to ${maxUi}`;
       setMsg({
         kind: 'ok',
-        text: `Authorized! Pulsar can now move up to ${maxUi} ${solMode ? 'wSOL' : 'of this token'}${recipientList.length ? ` (only to ${recipientList.length} allowed recipient(s))` : ''}, until you revoke.`,
+        text: `Authorized! Pulsar can now move ${capPhrase} ${solMode ? 'wSOL' : 'of this token'}${recipientList.length ? ` (only to ${recipientList.length} allowed recipient(s))` : ''}, until you revoke.`,
       });
       await loadDelegations();
     } catch (e) {
@@ -195,6 +208,16 @@ export default function WalletPage() {
             <input className="input" type="number" value={max} onChange={(e) => setMax(e.target.value)} />
           </div>
           <div>
+            <label className="label">Cap window</label>
+            <select className="input" value={period} onChange={(e) => setPeriod(e.target.value)}>
+              {PERIOD_OPTIONS.map((p) => (
+                <option key={p.seconds} value={String(p.seconds)}>
+                  {p.label}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div>
             <label className="label">Expires in (days, optional)</label>
             <input className="input" type="number" placeholder="never" value={expiryDays} onChange={(e) => setExpiryDays(e.target.value)} />
           </div>
@@ -224,10 +247,15 @@ export default function WalletPage() {
                     <div className="min-w-0">
                       <p className="font-mono text-sm text-slate-200">{d.mint.slice(0, 10)}…{d.mint.slice(-6)}</p>
                       <p className="mt-1 text-xs text-slate-400">
-                        used {d.usedAmount.toString()} / cap {d.maxAmount.toString()} (raw units)
+                        {d.periodSeconds > 0
+                          ? `${d.windowAmount.toString()} / ${d.maxAmount.toString()} this ${periodLabel(d.periodSeconds)} (raw units)`
+                          : `used ${d.usedAmount.toString()} / cap ${d.maxAmount.toString()} (raw units)`}
                         {' · '}
                         {d.expiry === 0 ? 'no expiry' : expired ? <span className="text-rose-400">expired</span> : `expires ${new Date(d.expiry * 1000).toLocaleDateString()}`}
                       </p>
+                      {d.periodSeconds > 0 && (
+                        <p className="mt-0.5 text-xs text-cyan-400">rolling cap · resets every {periodLabel(d.periodSeconds)}</p>
+                      )}
                       {d.recipients.length > 0 && (
                         <p className="mt-1 text-xs text-slate-500">restricted to {d.recipients.length} recipient(s)</p>
                       )}

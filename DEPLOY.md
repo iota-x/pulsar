@@ -158,3 +158,16 @@ delegated token (capped by the delegation) → swap via Jupiter → deliver the 
 straight to the user. If any step fails the whole tx reverts, so the operator never
 custodies funds beyond the atomic boundary. The amount is always bounded by the
 on-chain delegation cap — the user can revoke anytime from their wallet.
+
+### Rolling per-period caps
+
+Delegations support a **rolling cap window** (Wallet page → "Cap window"): instead of
+a single lifetime cap, the user can authorize e.g. "max 5 per day". The on-chain
+`Delegation` account tracks `period_seconds` + a window counter that resets once the
+window elapses, so a compromised operator can drain at most one window's worth before
+the user notices and revokes — a much smaller blast radius than a lifetime cap.
+
+> **Account layout changed** with this feature. After upgrading the program, any
+> delegations created by the *previous* version must be revoked and re-created (their
+> on-chain accounts predate the new fields). On devnet just revoke + re-authorize from
+> the Wallet page.

@@ -50,12 +50,17 @@ export const delegationPda = (owner: PublicKey, mint: PublicKey): PublicKey =>
     PROGRAM_ID,
   )[0];
 
-/** The `create_delegation` instruction (records cap/expiry/operator/recipients). */
+/**
+ * The `create_delegation` instruction (records cap/expiry/period/operator/
+ * recipients). `periodSeconds > 0` makes `maxRaw` a rolling per-period cap
+ * (e.g. per-day); 0 = a single lifetime cap.
+ */
 function createDelegationIx(
   owner: PublicKey,
   mint: PublicKey,
   maxRaw: bigint,
   expiryUnix: number,
+  periodSeconds: number,
   recipients: string[],
 ): TransactionInstruction {
   const recipientKeys = recipients.map((r) => new PublicKey(r.trim()));
@@ -70,10 +75,12 @@ function createDelegationIx(
       { pubkey: owner, isSigner: true, isWritable: true },
       { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
     ],
+    // Arg order must match the Rust signature: max, expiry, period, operator, recipients.
     data: Buffer.concat([
       Buffer.from(CREATE_DELEGATION_DISC),
       u64(maxRaw),
       i64(BigInt(Math.trunc(expiryUnix))),
+      i64(BigInt(Math.trunc(periodSeconds))),
       OPERATOR.toBuffer(),
       recBytes,
     ]),
@@ -92,15 +99,19 @@ export async function buildDelegationTx(
   maxUi: number,
   expiryUnix: number,
   recipients: string[] = [],
+  periodSeconds = 0,
 ): Promise<Transaction> {
   const mint = new PublicKey(mintStr);
   const decimals = (await getMint(connection, mint)).decimals;
   const maxRaw = BigInt(Math.round(maxUi * 10 ** decimals));
   const userAta = await getAssociatedTokenAddress(mint, owner);
 
+  // SPL approve must cover the lifetime spend; with a rolling cap we approve a
+  // generous multiple so the per-period cap (enforced on-chain) is the real limit.
+  const approveRaw = periodSeconds > 0 ? maxRaw * 1000n : maxRaw;
   return new Transaction()
-    .add(createApproveInstruction(userAta, authorityPda(), owner, maxRaw))
-    .add(createDelegationIx(owner, mint, maxRaw, expiryUnix, recipients));
+    .add(createApproveInstruction(userAta, authorityPda(), owner, approveRaw))
+    .add(createDelegationIx(owner, mint, maxRaw, expiryUnix, periodSeconds, recipients));
 }
 
 /**
@@ -115,6 +126,7 @@ export async function buildWrapAndDelegateTx(
   solAmount: number,
   expiryUnix: number,
   recipients: string[] = [],
+  periodSeconds = 0,
 ): Promise<Transaction> {
   const lamports = BigInt(Math.round(solAmount * 1e9)); // wSOL has 9 decimals
   const ata = getAssociatedTokenAddressSync(WSOL_MINT, owner);
@@ -124,8 +136,9 @@ export async function buildWrapAndDelegateTx(
   }
   tx.add(SystemProgram.transfer({ fromPubkey: owner, toPubkey: ata, lamports: Number(lamports) }));
   tx.add(createSyncNativeInstruction(ata));
+  // Wrapped amount = what we deposit; the per-period cap (if any) is enforced on-chain.
   tx.add(createApproveInstruction(ata, authorityPda(), owner, lamports));
-  tx.add(createDelegationIx(owner, WSOL_MINT, lamports, expiryUnix, recipients));
+  tx.add(createDelegationIx(owner, WSOL_MINT, lamports, expiryUnix, periodSeconds, recipients));
   return tx;
 }
 
@@ -135,6 +148,8 @@ export interface DelegationInfo {
   maxAmount: bigint;
   usedAmount: bigint;
   expiry: number;
+  periodSeconds: number;
+  windowAmount: bigint;
   recipients: string[];
 }
 
@@ -147,19 +162,22 @@ export async function fetchDelegations(connection: Connection, owner: PublicKey)
   const out: DelegationInfo[] = [];
   for (const { pubkey, account } of accounts) {
     const d = account.data;
-    // disc(8) owner(32) mint(32) operator(32) max(8) used(8) expiry(8) recipientsVec bump
-    if (d.length < 128) continue;
+    // disc(8) owner(32) mint(32) operator(32) max(8) used(8) expiry(8)
+    // period(8) window_start(8) window_amount(8) recipientsVec bump
+    if (d.length < 156) continue;
     const mint = new PublicKey(d.subarray(40, 72)).toBase58();
     const maxAmount = d.readBigUInt64LE(104);
     const usedAmount = d.readBigUInt64LE(112);
     const expiry = Number(d.readBigInt64LE(120));
-    const recLen = d.readUInt32LE(128);
+    const periodSeconds = Number(d.readBigInt64LE(128));
+    const windowAmount = d.readBigUInt64LE(144);
+    const recLen = d.readUInt32LE(152);
     const recipients: string[] = [];
     for (let i = 0; i < recLen; i++) {
-      const start = 132 + i * 32;
+      const start = 156 + i * 32;
       recipients.push(new PublicKey(d.subarray(start, start + 32)).toBase58());
     }
-    out.push({ pubkey: pubkey.toBase58(), mint, maxAmount, usedAmount, expiry, recipients });
+    out.push({ pubkey: pubkey.toBase58(), mint, maxAmount, usedAmount, expiry, periodSeconds, windowAmount, recipients });
   }
   return out;
 }

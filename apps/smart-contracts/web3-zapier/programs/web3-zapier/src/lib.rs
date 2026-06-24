@@ -94,16 +94,22 @@ pub mod web3_zapier {
 
     /// Record a user's bounded delegation: `operator` may transfer up to
     /// `max_amount` of `mint` from the owner's token account until `expiry`
-    /// (0 = no expiry). The matching SPL `approve` (owner → authority PDA) is
-    /// sent by the owner in the same transaction.
+    /// (0 = no expiry). If `period_seconds > 0`, `max_amount` is a *rolling
+    /// per-period* cap (e.g. max-per-day) that resets each window — limiting the
+    /// blast radius if the operator is ever compromised; if 0 it's a single
+    /// lifetime cap. The matching SPL `approve` (owner → authority PDA) is sent
+    /// by the owner in the same transaction.
     pub fn create_delegation(
         ctx: Context<CreateDelegation>,
         max_amount: u64,
         expiry: i64,
+        period_seconds: i64,
         operator: Pubkey,
         recipients: Vec<Pubkey>,
     ) -> Result<()> {
         require!(recipients.len() <= MAX_RECIPIENTS, DelegationError::TooManyRecipients);
+        require!(period_seconds >= 0, DelegationError::InvalidPeriod);
+        let now = Clock::get()?.unix_timestamp;
         let d = &mut ctx.accounts.delegation;
         d.owner = ctx.accounts.owner.key();
         d.mint = ctx.accounts.mint.key();
@@ -111,6 +117,9 @@ pub mod web3_zapier {
         d.max_amount = max_amount;
         d.used_amount = 0;
         d.expiry = expiry;
+        d.period_seconds = period_seconds;
+        d.window_start = now;
+        d.window_amount = 0;
         d.recipients = recipients;
         d.bump = ctx.bumps.delegation;
         emit!(DelegationCreated { owner: d.owner, mint: d.mint, operator, max_amount, expiry });
@@ -126,10 +135,24 @@ pub mod web3_zapier {
 
         let now = Clock::get()?.unix_timestamp;
         require!(d.expiry == 0 || now < d.expiry, DelegationError::Expired);
-        require!(
-            d.used_amount.checked_add(amount).unwrap() <= d.max_amount,
-            DelegationError::CapExceeded
-        );
+
+        // Cap check. With a period, enforce a rolling per-window cap (resetting
+        // the window once it has elapsed); otherwise a single lifetime cap.
+        if d.period_seconds > 0 {
+            if now.saturating_sub(d.window_start) >= d.period_seconds {
+                d.window_start = now;
+                d.window_amount = 0;
+            }
+            require!(
+                d.window_amount.checked_add(amount).unwrap() <= d.max_amount,
+                DelegationError::CapExceeded
+            );
+        } else {
+            require!(
+                d.used_amount.checked_add(amount).unwrap() <= d.max_amount,
+                DelegationError::CapExceeded
+            );
+        }
 
         // Defensive: source token account must belong to this delegation (mint + owner).
         {
@@ -175,6 +198,9 @@ pub mod web3_zapier {
         )?;
 
         d.used_amount = d.used_amount.checked_add(amount).unwrap();
+        if d.period_seconds > 0 {
+            d.window_amount = d.window_amount.checked_add(amount).unwrap();
+        }
         emit!(DelegatedTransfer { owner: d.owner, mint: d.mint, amount, used_amount: d.used_amount });
         Ok(())
     }
@@ -335,15 +361,19 @@ pub struct Delegation {
     pub owner: Pubkey,
     pub mint: Pubkey,
     pub operator: Pubkey,
-    pub max_amount: u64,
-    pub used_amount: u64,
+    pub max_amount: u64,     // per-period cap if period_seconds > 0, else lifetime cap
+    pub used_amount: u64,    // total moved over the delegation's life (display)
     pub expiry: i64,
+    pub period_seconds: i64, // 0 = lifetime cap; >0 = rolling window length
+    pub window_start: i64,   // unix start of the current window
+    pub window_amount: u64,  // amount moved within the current window
     pub recipients: Vec<Pubkey>, // empty = any recipient allowed
     pub bump: u8,
 }
 
 impl Delegation {
-    pub const SPACE: usize = 8 + 32 + 32 + 32 + 8 + 8 + 8 + (4 + MAX_RECIPIENTS * 32) + 1;
+    pub const SPACE: usize =
+        8 + 32 + 32 + 32 + 8 + 8 + 8 + 8 + 8 + 8 + (4 + MAX_RECIPIENTS * 32) + 1;
 }
 
 #[derive(Accounts)]
@@ -421,4 +451,6 @@ pub enum DelegationError {
     TooManyRecipients,
     #[msg("Recipient is not in the delegation's allowlist")]
     RecipientNotAllowed,
+    #[msg("Period must be zero (lifetime) or a positive number of seconds")]
+    InvalidPeriod,
 }
