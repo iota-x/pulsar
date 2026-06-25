@@ -277,23 +277,43 @@ export class SolanaWatcher {
       console.warn(`[watcher] invalid programId, skipping: ${programId}`);
       return;
     }
-    const emit = (signature: string, err: boolean) =>
-      this.onEvent({
-        target: programId,
-        data: {
-          triggerType: 'contract_event_emitted',
-          kind: err ? 'program_failed' : 'program_success',
-          programId,
-          signature,
-        },
-      });
     const sub = this.connection.onLogs(pubkey, (logs) => {
       void setCursor(programId, logs.signature);
-      emit(logs.signature, !!logs.err);
+      void this.emitProgramEvent(programId, logs.signature, logs.logs, !!logs.err);
     });
     this.programSubs.set(programId, sub);
-    await this.backfill(programId, pubkey, (sig) => emit(sig, false));
+    await this.backfill(programId, pubkey, (sig, lines) => void this.emitProgramEvent(programId, sig, lines, false));
     console.log(`[watcher] subscribed program ${programId}`);
+  }
+
+  /**
+   * Emit a program-activity event enriched with the tx's log lines and the
+   * accounts it touched — so the matcher can apply the per-type filters
+   * (wallet for dApp interactions, an instruction match for governance votes).
+   */
+  private async emitProgramEvent(programId: string, signature: string, logs: string[], err: boolean): Promise<void> {
+    const accounts = err ? [] : await this.fetchAccounts(signature);
+    this.onEvent({
+      target: programId,
+      data: {
+        triggerType: 'contract_event_emitted',
+        kind: err ? 'program_failed' : 'program_success',
+        programId,
+        signature,
+        logs,
+        accounts,
+      },
+    });
+  }
+
+  /** Best-effort list of base58 account keys involved in a transaction. */
+  private async fetchAccounts(signature: string): Promise<string[]> {
+    try {
+      const tx = await this.connection.getParsedTransaction(signature, { maxSupportedTransactionVersion: 0 });
+      return (tx?.transaction.message.accountKeys ?? []).map((k) => k.pubkey.toBase58());
+    } catch {
+      return [];
+    }
   }
 
   private async unsubscribeProgram(programId: string): Promise<void> {
@@ -316,10 +336,14 @@ export class SolanaWatcher {
     const sub = this.connection.onLogs(pubkey, (logs) => {
       if (logs.err) return;
       if (filter && !filter(logs.logs)) return;
-      this.onEvent({
-        target: programId,
-        data: { triggerType: triggerType as TriggerData['triggerType'], kind: 'fixed', signature: logs.signature },
-      });
+      // Enrich with accounts so collection/mint filters (nft_minted /
+      // new_token_listing) can scope the event to the configured address.
+      void this.fetchAccounts(logs.signature).then((accounts) =>
+        this.onEvent({
+          target: programId,
+          data: { triggerType: triggerType as TriggerData['triggerType'], kind: 'fixed', signature: logs.signature, logs: logs.logs, accounts },
+        }),
+      );
     });
     this.fixedSubs.set(programId, sub);
     console.log(`[watcher] subscribed fixed program ${programId} (${triggerType})`);
@@ -367,10 +391,20 @@ export class SolanaWatcher {
       console.warn(`[watcher] invalid account, skipping: ${account}`);
       return;
     }
+    try {
+      this.lastLamports.set(account, await this.connection.getBalance(pubkey));
+    } catch {
+      this.lastLamports.set(account, 0);
+    }
     const sub = this.connection.onAccountChange(pubkey, (info) => {
+      const prev = this.lastLamports.get(account) ?? info.lamports;
+      const lamportsDelta = info.lamports - prev;
+      this.lastLamports.set(account, info.lamports);
+      // Direction lets the matcher tell rewards (balance ↑) from a vesting
+      // release (value ↓); liquidity_pool_balance_changed fires on either.
       this.onEvent({
         target: account,
-        data: { triggerType: 'liquidity_pool_balance_changed', kind: 'account', account, lamports: info.lamports },
+        data: { triggerType: 'liquidity_pool_balance_changed', kind: 'account', account, lamports: info.lamports, lamportsDelta },
       });
     });
     this.dataSubs.set(account, sub);
@@ -381,6 +415,7 @@ export class SolanaWatcher {
     const s = this.dataSubs.get(account);
     if (s !== undefined) await this.connection.removeAccountChangeListener(s);
     this.dataSubs.delete(account);
+    this.lastLamports.delete(account);
     console.log(`[watcher] unsubscribed account ${account}`);
   }
 }
