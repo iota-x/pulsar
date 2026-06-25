@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   dedupeKeyFor,
+  bullmqJobId,
   planAction,
   solanaWsUrl,
   WORKFLOW_TEMPLATES,
@@ -60,6 +61,33 @@ describe('dedupeKeyFor', () => {
   });
 });
 
+describe('bullmqJobId', () => {
+  // BullMQ accepts a custom jobId with ':' only if it splits into exactly 3
+  // parts. Our keys embed ISO timestamps (HH:MM:SS) and 'slot:' segments, so a
+  // raw key would throw "Custom Id cannot contain :". The jobId must be ':'-free.
+  it('strips every colon from the dedupe key', () => {
+    expect(bullmqJobId('wf:wallet_received_sol:2026-06-25T08:59:38.988Z')).not.toContain(':');
+  });
+
+  it('produces a colon-free jobId for every dedupeKeyFor shape', () => {
+    const cases: TriggerData[] = [
+      { triggerType: 'transaction_confirmed', signature: 'sigABC' },
+      { triggerType: 'new_block_mined', slot: 42 },
+      { triggerType: 'scheduled_time', scheduledAt: '2026-01-01T00:00:00.000Z' },
+      { triggerType: 'wallet_received_sol', detectedAt: '2026-06-25T08:59:38.988Z' },
+    ];
+    for (const d of cases) {
+      expect(bullmqJobId(dedupeKeyFor('wf_123', d)), d.triggerType).not.toContain(':');
+    }
+  });
+
+  it('keeps distinct keys distinct (no collisions from sanitising)', () => {
+    const a = bullmqJobId(dedupeKeyFor('wf', { triggerType: 'transaction_confirmed', signature: 's1' }));
+    const b = bullmqJobId(dedupeKeyFor('wf', { triggerType: 'transaction_confirmed', signature: 's2' }));
+    expect(a).not.toBe(b);
+  });
+});
+
 describe('planAction (dry-run validation)', () => {
   it('flags an unknown action type', () => {
     expect(planAction('not_real', {})).toEqual({ type: 'not_real', status: 'failed', detail: 'Unknown action type' });
@@ -110,6 +138,16 @@ describe('catalog + template integrity', () => {
         const actionKeys = new Set([...ACTION_BY_TYPE[a.type].fields.map((f) => f.key), 'useDelegation']);
         for (const k of Object.keys(a.config)) {
           expect(actionKeys.has(k), `${t.id} action ${a.type} field ${k}`).toBe(true);
+        }
+      }
+    }
+  });
+
+  it('templates use single-brace {placeholders} (renderTemplate matches /\\{(\\w+)\\}/)', () => {
+    for (const t of WORKFLOW_TEMPLATES) {
+      for (const a of t.actions) {
+        for (const [k, v] of Object.entries(a.config)) {
+          expect(String(v).includes('{{'), `${t.id} action ${a.type} field ${k} has {{double braces}}`).toBe(false);
         }
       }
     }

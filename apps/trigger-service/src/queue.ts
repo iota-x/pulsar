@@ -1,5 +1,5 @@
 import { Queue, type ConnectionOptions } from 'bullmq';
-import { EXECUTION_QUEUE, type ExecutionJob, dedupeKeyFor } from '@web3-zapier/shared';
+import { EXECUTION_QUEUE, type ExecutionJob, dedupeKeyFor, bullmqJobId } from '@web3-zapier/shared';
 
 /** Parse a redis:// URL into BullMQ connection options. */
 const redisConnection = (url: string): ConnectionOptions => {
@@ -25,16 +25,11 @@ const queue = new Queue<ExecutionJob>(EXECUTION_QUEUE, {
  */
 export const enqueueExecution = (job: ExecutionJob) => {
   const dedupeKey = job.dedupeKey ?? dedupeKeyFor(job.workflowId, job.triggerData);
-  // BullMQ uses ':' as an internal Redis key separator and rejects it in a
-  // custom jobId; the dedupeKey is ':'-delimited, so map it to a safe char.
-  // Keep the canonical dedupeKey in the payload (the worker's Postgres claim
-  // relies on it); only the jobId needs sanitising.
-  const jobId = dedupeKey.replace(/:/g, '_');
   return queue.add(
     'execute',
     { ...job, dedupeKey },
     {
-      jobId,
+      jobId: bullmqJobId(dedupeKey),
       removeOnComplete: 1000,
       removeOnFail: 5000,
       attempts: 3,

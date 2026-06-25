@@ -96,6 +96,9 @@ export default function WorkflowsPage() {
                 <Link href={`/workflows/${wf.id}`} className="btn-ghost py-1.5 text-xs">
                   View
                 </Link>
+                <Link href={`/workflows/${wf.id}/edit`} className="btn-ghost py-1.5 text-xs">
+                  Edit
+                </Link>
                 <button
                   onClick={() => remove(wf)}
                   className="btn-ghost py-1.5 text-xs text-rose-400 hover:bg-rose-500/10"

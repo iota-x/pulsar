@@ -1,5 +1,5 @@
 import { Queue } from 'bullmq';
-import { EXECUTION_QUEUE, type ExecutionJob, dedupeKeyFor } from '@web3-zapier/shared';
+import { EXECUTION_QUEUE, type ExecutionJob, dedupeKeyFor, bullmqJobId } from '@web3-zapier/shared';
 import { config } from '../config';
 import { redisConnection } from './redis';
 
@@ -16,7 +16,7 @@ export const enqueueExecution = (job: ExecutionJob) => {
     'execute',
     { ...job, dedupeKey },
     {
-      jobId: dedupeKey,
+      jobId: bullmqJobId(dedupeKey),
       removeOnComplete: 1000,
       removeOnFail: 5000,
       attempts: 3,

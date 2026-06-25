@@ -529,7 +529,7 @@ export const WORKFLOW_TEMPLATES: WorkflowTemplate[] = [
     description: 'Ping Discord whenever a watched wallet receives a large SOL transfer.',
     category: 'Monitoring',
     trigger: { type: 'wallet_received_sol', config: { minAmount: '100' } },
-    actions: [{ type: 'send_discord_message', config: { content: '🐋 Whale move: {{wallet}} received {{amount}} SOL' } }],
+    actions: [{ type: 'send_discord_message', config: { content: '🐋 Whale move: {wallet} received {amount} SOL' } }],
   },
   {
     id: 'price-alert',
@@ -537,7 +537,7 @@ export const WORKFLOW_TEMPLATES: WorkflowTemplate[] = [
     description: 'Get notified the moment a token crosses your target price.',
     category: 'Trading',
     trigger: { type: 'token_price_threshold', config: { direction: 'above' } },
-    actions: [{ type: 'send_discord_message', config: { content: '📈 {{mint}} crossed {{targetPrice}} (now {{price}})' } }],
+    actions: [{ type: 'send_discord_message', config: { content: '📈 {mint} crossed {targetPrice} (now {price})' } }],
   },
   {
     id: 'auto-forward',
@@ -553,7 +553,7 @@ export const WORKFLOW_TEMPLATES: WorkflowTemplate[] = [
     description: 'Alert by email when a wallet balance drops below a threshold.',
     category: 'Monitoring',
     trigger: { type: 'wallet_balance_below_threshold', config: { threshold: '1' } },
-    actions: [{ type: 'send_email', config: { subject: 'Low balance', body: 'Wallet {{wallet}} is below threshold.' } }],
+    actions: [{ type: 'send_email', config: { subject: 'Low balance', body: 'Wallet {wallet} is below threshold.' } }],
   },
   {
     id: 'nft-mint-watch',

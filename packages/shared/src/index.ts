@@ -103,6 +103,18 @@ export function dedupeKeyFor(workflowId: string, data: TriggerData): string {
   return `${workflowId}:${t}:${stamp}`;
 }
 
+/**
+ * Turn a dedupe key into a BullMQ-safe custom jobId. BullMQ uses ':' as an
+ * internal Redis key separator and rejects a custom jobId that contains ':'
+ * unless it splits into exactly 3 parts — but our keys embed ISO timestamps
+ * (`HH:MM:SS`) and `slot:` segments, so they'd throw "Custom Id cannot contain :".
+ * Map ':' to '_' for the jobId; the canonical ':'-delimited key still lives in
+ * the job payload (the worker's Postgres claim relies on it for exactly-once).
+ */
+export function bullmqJobId(dedupeKey: string): string {
+  return dedupeKey.replace(/:/g, '_');
+}
+
 // ---------------------------------------------------------------------------
 // Execution result / log status
 // ---------------------------------------------------------------------------

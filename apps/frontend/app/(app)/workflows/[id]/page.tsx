@@ -84,6 +84,9 @@ export default function WorkflowDetailPage() {
           <button onClick={run} className="btn-primary">
             ▶ Run now
           </button>
+          <button onClick={() => router.push(`/workflows/${id}/edit`)} className="btn-ghost">
+            ✏️ Edit
+          </button>
           <button onClick={remove} className="btn-ghost text-rose-400">
             Delete
           </button>
