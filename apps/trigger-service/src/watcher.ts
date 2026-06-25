@@ -58,6 +58,7 @@ export class SolanaWatcher {
   private slotSub: number | null = null;
 
   private lastLamports = new Map<string, number>();
+  private lastValue = new Map<string, bigint>(); // watched account → token amount or lamports
   private lastTokenAmount = new Map<string, bigint>();
   private mintDecimals = new Map<string, number>();
 
@@ -306,11 +307,21 @@ export class SolanaWatcher {
     });
   }
 
-  /** Best-effort list of base58 account keys involved in a transaction. */
+  /**
+   * Best-effort list of base58 account keys involved in a transaction. Includes
+   * addresses pulled in via Address Lookup Tables (meta.loadedAddresses) — modern
+   * dApps put the user's wallet there, not in the static keys, so a wallet filter
+   * that ignored them would miss real interactions.
+   */
   private async fetchAccounts(signature: string): Promise<string[]> {
     try {
       const tx = await this.connection.getParsedTransaction(signature, { maxSupportedTransactionVersion: 0 });
-      return (tx?.transaction.message.accountKeys ?? []).map((k) => k.pubkey.toBase58());
+      const keys = (tx?.transaction.message.accountKeys ?? []).map((k) => k.pubkey.toBase58());
+      const loaded = tx?.meta?.loadedAddresses;
+      if (loaded) {
+        for (const k of [...loaded.writable, ...loaded.readonly]) keys.push(k.toBase58());
+      }
+      return keys;
     } catch {
       return [];
     }
@@ -383,6 +394,24 @@ export class SolanaWatcher {
 
   // --- Accounts ---------------------------------------------------------
 
+  /**
+   * The account's "value" for direction detection. For an SPL token account
+   * (vesting vault, liquid-stake position) that's the token amount held in the
+   * account DATA — lamports stay pinned at the rent-exempt minimum, so a token
+   * release wouldn't show up there. For everything else (native stake accounts,
+   * pool accounts) fall back to lamports.
+   */
+  private accountValue(pubkey: PublicKey, info: { owner: PublicKey; data: Buffer; lamports: number } | null): bigint {
+    if (info && info.owner.equals(TOKEN_PROGRAM_ID) && info.data.length === 165) {
+      try {
+        return unpackAccount(pubkey, info as Parameters<typeof unpackAccount>[1], TOKEN_PROGRAM_ID).amount;
+      } catch {
+        /* fall through to lamports */
+      }
+    }
+    return BigInt(info?.lamports ?? 0);
+  }
+
   private async subscribeAccount(account: string): Promise<void> {
     let pubkey: PublicKey;
     try {
@@ -392,19 +421,20 @@ export class SolanaWatcher {
       return;
     }
     try {
-      this.lastLamports.set(account, await this.connection.getBalance(pubkey));
+      this.lastValue.set(account, this.accountValue(pubkey, await this.connection.getAccountInfo(pubkey)));
     } catch {
-      this.lastLamports.set(account, 0);
+      this.lastValue.set(account, 0n);
     }
     const sub = this.connection.onAccountChange(pubkey, (info) => {
-      const prev = this.lastLamports.get(account) ?? info.lamports;
-      const lamportsDelta = info.lamports - prev;
-      this.lastLamports.set(account, info.lamports);
-      // Direction lets the matcher tell rewards (balance ↑) from a vesting
+      const value = this.accountValue(pubkey, info);
+      const prev = this.lastValue.get(account) ?? value;
+      const valueDelta = Number(value - prev);
+      this.lastValue.set(account, value);
+      // Direction lets the matcher tell rewards (value ↑) from a vesting
       // release (value ↓); liquidity_pool_balance_changed fires on either.
       this.onEvent({
         target: account,
-        data: { triggerType: 'liquidity_pool_balance_changed', kind: 'account', account, lamports: info.lamports, lamportsDelta },
+        data: { triggerType: 'liquidity_pool_balance_changed', kind: 'account', account, lamports: info.lamports, valueDelta },
       });
     });
     this.dataSubs.set(account, sub);
@@ -415,7 +445,7 @@ export class SolanaWatcher {
     const s = this.dataSubs.get(account);
     if (s !== undefined) await this.connection.removeAccountChangeListener(s);
     this.dataSubs.delete(account);
-    this.lastLamports.delete(account);
+    this.lastValue.delete(account);
     console.log(`[watcher] unsubscribed account ${account}`);
   }
 }

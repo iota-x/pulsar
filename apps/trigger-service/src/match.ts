@@ -22,8 +22,9 @@ export interface MatchData {
   // program/fixed-family enrichment
   accounts?: string[];
   logs?: string[];
-  // account-family enrichment
-  lamportsDelta?: number;
+  // account-family enrichment — change in the account's value (token amount for
+  // SPL token accounts, else lamports); sign indicates rewards (+) vs release (−).
+  valueDelta?: number;
   // slot-family
   slot?: number;
 }
@@ -90,9 +91,9 @@ export function matchSub(sub: Subscription, data: MatchData): boolean {
 
     case 'account':
       if (!ACCOUNT_TYPES.has(sub.triggerType)) return false;
-      // Rewards credited → balance rises; a vesting release → value leaves the account.
-      if (sub.triggerType === 'staking_rewards_earned') return typeof data.lamportsDelta === 'number' && data.lamportsDelta > 0;
-      if (sub.triggerType === 'token_vesting_release') return typeof data.lamportsDelta === 'number' && data.lamportsDelta < 0;
+      // Rewards credited → value rises; a vesting release → value leaves the account.
+      if (sub.triggerType === 'staking_rewards_earned') return typeof data.valueDelta === 'number' && data.valueDelta > 0;
+      if (sub.triggerType === 'token_vesting_release') return typeof data.valueDelta === 'number' && data.valueDelta < 0;
       return true; // liquidity_pool_balance_changed: any balance change
 
     case 'slot': {

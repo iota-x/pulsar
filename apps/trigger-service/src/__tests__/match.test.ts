@@ -72,18 +72,18 @@ describe('matchSub — fixed programs (collection / mint filters)', () => {
 
 describe('matchSub — account direction (staking / vesting)', () => {
   it('staking_rewards_earned fires only when the balance increases', () => {
-    expect(matchSub(sub('staking_rewards_earned'), { kind: 'account', lamportsDelta: 5000 })).toBe(true);
-    expect(matchSub(sub('staking_rewards_earned'), { kind: 'account', lamportsDelta: -5000 })).toBe(false);
+    expect(matchSub(sub('staking_rewards_earned'), { kind: 'account', valueDelta: 5000 })).toBe(true);
+    expect(matchSub(sub('staking_rewards_earned'), { kind: 'account', valueDelta: -5000 })).toBe(false);
   });
 
   it('token_vesting_release fires only when value leaves the account', () => {
-    expect(matchSub(sub('token_vesting_release'), { kind: 'account', lamportsDelta: -1000 })).toBe(true);
-    expect(matchSub(sub('token_vesting_release'), { kind: 'account', lamportsDelta: 1000 })).toBe(false);
+    expect(matchSub(sub('token_vesting_release'), { kind: 'account', valueDelta: -1000 })).toBe(true);
+    expect(matchSub(sub('token_vesting_release'), { kind: 'account', valueDelta: 1000 })).toBe(false);
   });
 
   it('liquidity_pool_balance_changed fires on any change', () => {
-    expect(matchSub(sub('liquidity_pool_balance_changed'), { kind: 'account', lamportsDelta: 1 })).toBe(true);
-    expect(matchSub(sub('liquidity_pool_balance_changed'), { kind: 'account', lamportsDelta: -1 })).toBe(true);
+    expect(matchSub(sub('liquidity_pool_balance_changed'), { kind: 'account', valueDelta: 1 })).toBe(true);
+    expect(matchSub(sub('liquidity_pool_balance_changed'), { kind: 'account', valueDelta: -1 })).toBe(true);
   });
 });
 
