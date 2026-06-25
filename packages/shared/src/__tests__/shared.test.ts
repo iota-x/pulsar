@@ -9,6 +9,9 @@ import {
   ACTION_BY_TYPE,
   isTriggerType,
   isActionType,
+  TRIGGER_TYPES,
+  TRIGGER_PLACEHOLDERS,
+  placeholdersFor,
   type TriggerData,
 } from '../index';
 
@@ -150,6 +153,15 @@ describe('catalog + template integrity', () => {
           expect(String(v).includes('{{'), `${t.id} action ${a.type} field ${k} has {{double braces}}`).toBe(false);
         }
       }
+    }
+  });
+
+  it('every trigger type has a placeholder list, and placeholdersFor prepends triggerType', () => {
+    for (const t of TRIGGER_TYPES) {
+      expect(TRIGGER_PLACEHOLDERS[t], `${t} placeholders`).toBeDefined();
+      const all = placeholdersFor(t);
+      expect(all[0]).toBe('triggerType');
+      expect(all).toEqual(['triggerType', ...TRIGGER_PLACEHOLDERS[t]]);
     }
   });
 

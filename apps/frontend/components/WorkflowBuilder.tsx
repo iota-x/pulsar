@@ -1,12 +1,13 @@
 'use client';
 
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   TRIGGER_CATALOG,
   ACTION_CATALOG,
   TRIGGER_BY_TYPE,
   ACTION_BY_TYPE,
+  placeholdersFor,
   type TriggerType,
   type ActionType,
   type Implementation,
@@ -59,40 +60,89 @@ function ConfigFields({
   fields,
   config,
   onChange,
+  placeholders,
 }: {
   fields: FieldDef[];
   config: Config;
   onChange: (key: string, value: string) => void;
+  /** Available {tokens} to offer on templated fields (from the selected trigger). */
+  placeholders?: string[];
 }) {
+  const inputRefs = useRef<Record<string, HTMLInputElement | null>>({});
+
+  // Insert {token} at the caret (or append) so users don't have to guess the syntax.
+  const insert = (key: string, token: string) => {
+    const el = inputRefs.current[key];
+    const cur = config[key] ?? '';
+    const focused = el && document.activeElement === el;
+    const start = focused ? el!.selectionStart ?? cur.length : cur.length;
+    const end = focused ? el!.selectionEnd ?? cur.length : cur.length;
+    const pad = !focused && cur && !cur.endsWith(' ') ? ' ' : '';
+    const next = cur.slice(0, start) + pad + token + cur.slice(end);
+    onChange(key, next);
+    const caret = start + pad.length + token.length;
+    requestAnimationFrame(() => {
+      const node = inputRefs.current[key];
+      if (node) {
+        node.focus();
+        node.setSelectionRange(caret, caret);
+      }
+    });
+  };
+
   if (fields.length === 0) return <p className="text-xs text-slate-500">No configuration needed.</p>;
   return (
     <div className="grid gap-3 sm:grid-cols-2">
-      {fields.map((f) => (
-        <div key={f.key}>
-          <label className="label">
-            {f.label} {f.required && <span className="text-rose-400">*</span>}
-          </label>
-          {f.type === 'select' ? (
-            <select className="input" value={config[f.key] ?? ''} onChange={(e) => onChange(f.key, e.target.value)}>
-              <option value="">— select —</option>
-              {f.options?.map((opt) => (
-                <option key={opt} value={opt}>
-                  {opt}
-                </option>
-              ))}
-            </select>
-          ) : (
-            <input
-              className="input"
-              type={f.type === 'number' ? 'number' : 'text'}
-              placeholder={f.placeholder}
-              value={config[f.key] ?? ''}
-              onChange={(e) => onChange(f.key, e.target.value)}
-            />
-          )}
-          {f.help && <p className="mt-1 text-xs text-slate-500">{f.help}</p>}
-        </div>
-      ))}
+      {fields.map((f) => {
+        const showTokens = f.templated && placeholders && placeholders.length > 0;
+        return (
+          <div key={f.key} className={showTokens ? 'sm:col-span-2' : undefined}>
+            <label className="label">
+              {f.label} {f.required && <span className="text-rose-400">*</span>}
+            </label>
+            {f.type === 'select' ? (
+              <select className="input" value={config[f.key] ?? ''} onChange={(e) => onChange(f.key, e.target.value)}>
+                <option value="">— select —</option>
+                {f.options?.map((opt) => (
+                  <option key={opt} value={opt}>
+                    {opt}
+                  </option>
+                ))}
+              </select>
+            ) : (
+              <input
+                ref={(el) => {
+                  inputRefs.current[f.key] = el;
+                }}
+                className="input"
+                type={f.type === 'number' ? 'number' : 'text'}
+                placeholder={f.placeholder}
+                value={config[f.key] ?? ''}
+                onChange={(e) => onChange(f.key, e.target.value)}
+              />
+            )}
+            {showTokens && (
+              <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                <span className="text-xs text-slate-500">Insert from trigger:</span>
+                {placeholders!.map((ph) => (
+                  <button
+                    key={ph}
+                    type="button"
+                    onClick={() => insert(f.key, `{${ph}}`)}
+                    className="rounded-md border border-brand/30 bg-brand/10 px-1.5 py-0.5 font-mono text-[11px] text-brand transition hover:bg-brand/20"
+                    title={`Insert {${ph}}`}
+                  >
+                    {'{'}
+                    {ph}
+                    {'}'}
+                  </button>
+                ))}
+              </div>
+            )}
+            {f.help && <p className="mt-1 text-xs text-slate-500">{f.help}</p>}
+          </div>
+        );
+      })}
     </div>
   );
 }
@@ -268,6 +318,7 @@ export function WorkflowBuilder({
               fields={ACTION_FIELDS[action.type]}
               config={action.config}
               onChange={(key, value) => setActionField(i, key, value)}
+              placeholders={placeholdersFor(triggerType)}
             />
           </div>
         ))}

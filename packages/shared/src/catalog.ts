@@ -20,6 +20,8 @@ export interface CatalogField {
   options?: string[];
   required?: boolean;
   help?: string;
+  /** This field is run through renderTemplate — supports {placeholders} from the trigger. */
+  templated?: boolean;
 }
 
 export interface CatalogEntry<T extends string> {
@@ -293,7 +295,7 @@ export const ACTION_CATALOG: CatalogEntry<ActionType>[] = [
     implementation: 'api',
     fields: [
       { key: 'webhookUrl', label: 'Discord webhook URL', placeholder: 'https://discord.com/api/webhooks/…', required: true },
-      { key: 'content', label: 'Message', placeholder: '⚡ {triggerType} on {wallet}', help: 'Use {placeholders} from trigger data' },
+      { key: 'content', label: 'Message', placeholder: '⚡ {triggerType} on {wallet}', help: 'Use {placeholders} from trigger data', templated: true },
     ],
   },
   {
@@ -321,7 +323,7 @@ export const ACTION_CATALOG: CatalogEntry<ActionType>[] = [
     implementation: 'api',
     fields: [
       { key: 'channel', label: 'Channel', type: 'select', options: ['in_app', 'webhook'] },
-      { key: 'message', label: 'Message', placeholder: 'Notification text' },
+      { key: 'message', label: 'Message', placeholder: 'Notification text', help: 'Use {placeholders} from trigger data', templated: true },
       { key: 'url', label: 'Webhook URL (if channel = webhook)', placeholder: 'https://…' },
     ],
   },
@@ -502,6 +504,42 @@ export const TRIGGER_LABELS = Object.fromEntries(
 export const ACTION_LABELS = Object.fromEntries(
   ACTION_CATALOG.map((a) => [a.type, a.label]),
 ) as Record<ActionType, string>;
+
+/**
+ * The data keys each trigger emits into triggerData (besides the always-present
+ * `triggerType`), in the order most useful for a message. The builder surfaces
+ * these as click-to-insert `{placeholders}` for templated action fields, and the
+ * worker's renderTemplate fills them in when a real event fires. Keep in sync
+ * with what the trigger service emits (apps/trigger-service watcher/index).
+ */
+export const TRIGGER_PLACEHOLDERS: Record<TriggerType, string[]> = {
+  wallet_received_sol: ['wallet', 'amount', 'balanceSol'],
+  wallet_received_token: ['wallet', 'mint', 'amount'],
+  wallet_received_nft: ['wallet', 'mint'],
+  airdrop_detected: ['wallet', 'mint', 'amount'],
+  transaction_confirmed: ['wallet', 'signature'],
+  token_swap_executed: ['wallet', 'signature'],
+  wallet_balance_below_threshold: ['wallet', 'balanceSol'],
+  wallet_funded_by_address: ['wallet', 'amount', 'fromAddress'],
+  new_block_mined: ['slot'],
+  token_price_threshold: ['mint', 'price', 'targetPrice'],
+  scheduled_time: ['scheduledAt'],
+  nft_transferred: ['mint'],
+  nft_minted: ['signature'],
+  new_token_listing: ['signature'],
+  cross_chain_token_transfer: ['signature'],
+  contract_event_emitted: ['programId', 'signature'],
+  contract_execution_failed: ['programId', 'signature'],
+  specific_contract_interaction: ['programId', 'signature'],
+  user_interacts_with_dapp: ['programId', 'signature'],
+  governance_vote_triggered: ['programId', 'signature'],
+  liquidity_pool_balance_changed: ['account', 'lamports'],
+  staking_rewards_earned: ['account', 'lamports'],
+  token_vesting_release: ['account', 'lamports'],
+};
+
+/** All {placeholders} available for a trigger, including the universal `triggerType`. */
+export const placeholdersFor = (type: TriggerType): string[] => ['triggerType', ...(TRIGGER_PLACEHOLDERS[type] ?? [])];
 
 export const isTriggerType = (v: unknown): v is TriggerType =>
   typeof v === 'string' && v in TRIGGER_BY_TYPE;

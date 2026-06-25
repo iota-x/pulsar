@@ -11,6 +11,8 @@ export {
   ACTION_LABELS,
   WORKFLOW_TEMPLATES,
   TEMPLATE_BY_ID,
+  TRIGGER_PLACEHOLDERS,
+  placeholdersFor,
 } from '@web3-zapier/shared';
 export type {
   TriggerType,
