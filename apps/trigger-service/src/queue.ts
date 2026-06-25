@@ -25,11 +25,16 @@ const queue = new Queue<ExecutionJob>(EXECUTION_QUEUE, {
  */
 export const enqueueExecution = (job: ExecutionJob) => {
   const dedupeKey = job.dedupeKey ?? dedupeKeyFor(job.workflowId, job.triggerData);
+  // BullMQ uses ':' as an internal Redis key separator and rejects it in a
+  // custom jobId; the dedupeKey is ':'-delimited, so map it to a safe char.
+  // Keep the canonical dedupeKey in the payload (the worker's Postgres claim
+  // relies on it); only the jobId needs sanitising.
+  const jobId = dedupeKey.replace(/:/g, '_');
   return queue.add(
     'execute',
     { ...job, dedupeKey },
     {
-      jobId: dedupeKey,
+      jobId,
       removeOnComplete: 1000,
       removeOnFail: 5000,
       attempts: 3,
