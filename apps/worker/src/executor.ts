@@ -7,6 +7,7 @@ import {
   dedupeKeyFor,
   planAction,
   ACTION_BY_TYPE,
+  custodyOf,
 } from '@web3-zapier/shared';
 import prisma from './prisma';
 import { actionHandlers } from './actions';
@@ -15,6 +16,17 @@ import { notifyFailure } from './notify';
 /** Postgres unique-constraint violation (a duplicate dedupeKey claim). */
 function isUniqueViolation(err: unknown): boolean {
   return typeof err === 'object' && err !== null && (err as { code?: string }).code === 'P2002';
+}
+
+/**
+ * Explicit opt-out of the non-custodial default — run a delegated-capable action
+ * from the operator's own wallet instead of the user's delegation. Accepts the
+ * boolean `false` or its stringified forms (config values arrive as strings from
+ * the builder). Anything else (unset / true) keeps the non-custodial default.
+ */
+function isOperatorFunded(config: ActionConfig): boolean {
+  const v = config.useDelegation;
+  return v === false || v === 'false' || v === 'operator';
 }
 
 /**
@@ -101,12 +113,24 @@ export async function executeWorkflow(job: ExecutionJob): Promise<void> {
 
     try {
       const config = { ...((action.config as Record<string, unknown>) ?? {}) } as ActionConfig;
-      // Delegated mode: bind the owner to the workflow author's VERIFIED wallet
-      // (server-trusted) — never trust a client-supplied owner.
-      if (config.useDelegation) {
-        if (!workflow.user.walletAddress) throw new Error('No wallet linked to this account for delegated actions');
+
+      // Custody policy — NON-CUSTODIAL BY DEFAULT. Actions whose capability is
+      // 'delegated' move the USER's own funds, so we run them through the
+      // delegation program by default: bind `owner` to the workflow author's
+      // VERIFIED wallet (server-trusted — never a client-supplied value). The
+      // operator then signs only within the user's pre-approved delegation
+      // (capped amount, expiry, allowlist) and never custodies their funds.
+      // An explicit `useDelegation: false` opts back into operator-funded
+      // execution (for platform-run automations on the operator's own assets).
+      if (custodyOf(action.type) === 'delegated' && !isOperatorFunded(config)) {
+        if (!workflow.user.walletAddress) {
+          throw new Error(
+            `${action.type} moves your own funds and runs non-custodially — link a wallet and authorize a delegation first`,
+          );
+        }
         config.owner = workflow.user.walletAddress;
       }
+
       const detail = await handler(config, triggerData);
       results.push({ actionId: action.id, type: action.type, status: 'success', detail });
       console.log(`[executor] ✓ ${action.type}: ${detail}`);

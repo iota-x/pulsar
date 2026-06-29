@@ -170,38 +170,62 @@ pub mod web3_zapier {
             require!(d.recipients.contains(&dest_owner), DelegationError::RecipientNotAllowed);
         }
 
-        // Hand-built SPL Token `transfer` (tag 3 + u64 amount), signed by the
-        // authority PDA which the owner approved as the token account's delegate.
-        let ix = anchor_lang::solana_program::instruction::Instruction {
-            program_id: ctx.accounts.token_program.key(),
-            accounts: vec![
-                anchor_lang::solana_program::instruction::AccountMeta::new(ctx.accounts.source.key(), false),
-                anchor_lang::solana_program::instruction::AccountMeta::new(ctx.accounts.destination.key(), false),
-                anchor_lang::solana_program::instruction::AccountMeta::new_readonly(ctx.accounts.authority.key(), true),
-            ],
-            data: {
-                let mut v = Vec::with_capacity(9);
-                v.push(3u8);
-                v.extend_from_slice(&amount.to_le_bytes());
-                v
-            },
-        };
-        anchor_lang::solana_program::program::invoke_signed(
-            &ix,
-            &[
-                ctx.accounts.source.to_account_info(),
-                ctx.accounts.destination.to_account_info(),
-                ctx.accounts.authority.to_account_info(),
-                ctx.accounts.token_program.to_account_info(),
-            ],
-            &[&[b"authority", &[ctx.bumps.authority]]],
-        )?;
+        // Split off the platform fee (bps of gross); the recipient gets the rest.
+        // The full gross `amount` is what counts against the cap (checked above).
+        let fee = (amount as u128 * FEE_BPS as u128 / 10_000u128) as u64;
+        let net = amount.checked_sub(fee).unwrap();
+
+        // The fee destination must be the treasury's token account for this mint.
+        {
+            let data = ctx.accounts.fee_destination.try_borrow_data()?;
+            require!(data.len() >= 64, DelegationError::InvalidTokenAccount);
+            require!(&data[0..32] == d.mint.as_ref(), DelegationError::InvalidTokenAccount);
+            let fee_owner = Pubkey::try_from(&data[32..64]).map_err(|_| DelegationError::InvalidTokenAccount)?;
+            require_keys_eq!(fee_owner, TREASURY, DelegationError::InvalidTokenAccount);
+        }
+
+        // Hand-built SPL Token `transfer`s (tag 3 + u64 amount), signed by the
+        // authority PDA the owner approved as delegate: net → recipient, fee →
+        // treasury (skipped when it rounds to zero on tiny amounts).
+        let bump = ctx.bumps.authority;
+        for (to, amt) in [
+            (ctx.accounts.destination.to_account_info(), net),
+            (ctx.accounts.fee_destination.to_account_info(), fee),
+        ] {
+            if amt == 0 {
+                continue;
+            }
+            let ix = anchor_lang::solana_program::instruction::Instruction {
+                program_id: ctx.accounts.token_program.key(),
+                accounts: vec![
+                    anchor_lang::solana_program::instruction::AccountMeta::new(ctx.accounts.source.key(), false),
+                    anchor_lang::solana_program::instruction::AccountMeta::new(*to.key, false),
+                    anchor_lang::solana_program::instruction::AccountMeta::new_readonly(ctx.accounts.authority.key(), true),
+                ],
+                data: {
+                    let mut v = Vec::with_capacity(9);
+                    v.push(3u8);
+                    v.extend_from_slice(&amt.to_le_bytes());
+                    v
+                },
+            };
+            anchor_lang::solana_program::program::invoke_signed(
+                &ix,
+                &[
+                    ctx.accounts.source.to_account_info(),
+                    to.clone(),
+                    ctx.accounts.authority.to_account_info(),
+                    ctx.accounts.token_program.to_account_info(),
+                ],
+                &[&[b"authority", &[bump]]],
+            )?;
+        }
 
         d.used_amount = d.used_amount.checked_add(amount).unwrap();
         if d.period_seconds > 0 {
             d.window_amount = d.window_amount.checked_add(amount).unwrap();
         }
-        emit!(DelegatedTransfer { owner: d.owner, mint: d.mint, amount, used_amount: d.used_amount });
+        emit!(DelegatedTransfer { owner: d.owner, mint: d.mint, amount, fee, used_amount: d.used_amount });
         Ok(())
     }
 
@@ -356,6 +380,20 @@ pub enum GovError {
 
 pub const MAX_RECIPIENTS: usize = 5;
 
+/// Platform fee in basis points (50 = 0.5%), taken from each delegated transfer
+/// and routed to the treasury. The recipient receives the remainder; the full
+/// gross `amount` still counts against the user's delegated cap.
+pub const FEE_BPS: u64 = 50;
+
+/// Treasury wallet that collects platform fees. The `fee_destination` token
+/// account passed to execute_delegated_transfer must be an SPL token account
+/// for the transfer's mint owned by this address.
+/// Bytes of FgCiArPJfe9YCfW8Gioo87uoG7M9zXiPg8JvJHK3uTtJ (the operator wallet).
+pub const TREASURY: Pubkey = Pubkey::new_from_array([
+    218, 14, 130, 68, 237, 117, 171, 144, 76, 41, 21, 145, 148, 41, 88, 59, 217, 115, 133, 70, 77,
+    200, 103, 247, 103, 169, 29, 116, 252, 133, 10, 71,
+]);
+
 #[account]
 pub struct Delegation {
     pub owner: Pubkey,
@@ -404,6 +442,10 @@ pub struct ExecuteDelegatedTransfer<'info> {
     /// CHECK: destination token account (validated by the Token program).
     #[account(mut)]
     pub destination: UncheckedAccount<'info>,
+    /// CHECK: treasury fee token account — must be for the delegation's mint and
+    /// owned by TREASURY (validated in-handler). Receives the platform fee.
+    #[account(mut)]
+    pub fee_destination: UncheckedAccount<'info>,
     /// CHECK: program authority PDA — the approved token delegate.
     #[account(seeds = [b"authority"], bump)]
     pub authority: UncheckedAccount<'info>,
@@ -434,6 +476,7 @@ pub struct DelegatedTransfer {
     pub owner: Pubkey,
     pub mint: Pubkey,
     pub amount: u64,
+    pub fee: u64,
     pub used_amount: u64,
 }
 

@@ -34,7 +34,11 @@ export const sendTokens: ActionHandler = async (config) => {
 
   // --- Delegated (non-custodial) SPL transfer from a user's own wallet ---
   if (config.owner) {
-    if (!config.mint) throw new Error('send_tokens: delegated mode requires "mint"');
+    if (!config.mint) {
+      throw new Error(
+        'send_tokens: native SOL cannot move non-custodially (SPL delegation covers tokens only) — use an SPL token mint, or wrapped SOL (wSOL)',
+      );
+    }
     const owner = toPublicKey(config.owner, 'send_tokens owner');
     const mint = toPublicKey(config.mint, 'send_tokens mint');
     const decimals = (await getMint(connection, mint)).decimals;

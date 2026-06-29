@@ -1,15 +1,17 @@
 import 'dotenv/config';
-import { type TriggerConfig, type TriggerData, isTriggerType, solanaWsUrl } from '@web3-zapier/shared';
+import { type TriggerConfig, type TriggerData, isTriggerType, solanaWsUrl, resolveNetwork } from '@web3-zapier/shared';
 import prisma from './prisma';
 import { enqueueExecution } from './queue';
 import { SolanaWatcher, type DetectedEvent } from './watcher';
 import {
   matchSub,
+  priceSatisfied,
   WALLET_TYPES,
   PROGRAM_TYPES,
   ACCOUNT_TYPES,
   type Subscription,
 } from './match';
+import { getFiredStates, setFiredState } from './priceState';
 
 const RPC_URL = process.env.SOLANA_RPC_URL ?? 'https://api.devnet.solana.com';
 // WS follows the RPC unless explicitly overridden — so a dedicated RPC needs
@@ -21,11 +23,15 @@ const JUPITER_PRICE_API = process.env.JUPITER_PRICE_API ?? 'https://api.jup.ag/p
 
 // Trigger type → subscription family lives in ./match (shared with the matcher).
 
+// Cluster-specific program addresses resolve from SOLANA_RPC_URL (devnet vs
+// mainnet); an explicit env override still wins for custom/relocated programs.
+const net = resolveNetwork(RPC_URL);
+
 // Trigger types detected by watching a fixed well-known program's logs.
 const FIXED_PROGRAMS: Record<string, string> = {
-  nft_minted: 'metaqbxxUerdq28cj1RbAWkYQm3ybzjb6a8bt518x1s', // Metaplex Token Metadata
-  new_token_listing: process.env.RAYDIUM_CPMM_PROGRAM ?? 'DRaycpLY18LhpbydsBWbVJtxpNv9oXPgjRSfpF2bWpYb', // Raydium CPMM devnet
-  cross_chain_token_transfer: process.env.WORMHOLE_CORE_BRIDGE ?? '3u8hJUVTA4jH1wYAyUur7FFZVQ8H635K3tSHHF4ssjQ5',
+  nft_minted: net.metaplexTokenMetadata,
+  new_token_listing: process.env.RAYDIUM_CPMM_PROGRAM ?? net.raydiumCpmmProgram,
+  cross_chain_token_transfer: process.env.WORMHOLE_CORE_BRIDGE ?? net.wormholeCoreBridge,
 };
 
 /** Resolve the on-chain target string a trigger should subscribe to. */
@@ -44,7 +50,11 @@ function targetFor(type: string, c: TriggerConfig): string | null {
 let index = new Map<string, Subscription[]>();
 const scheduleTimers = new Map<string, NodeJS.Timeout>();
 let priceWatches: Subscription[] = [];
-const priceFired = new Map<string, boolean>(); // workflowId → was-satisfied (edge trigger)
+// Edge-trigger state now lives in Redis (priceState) so it survives restarts.
+// Track consecutive price-feed failures to surface a sustained outage — a stop-loss
+// can't protect anything while the feed is dark.
+let priceFeedFailures = 0;
+const PRICE_FEED_ALERT_AFTER = 3;
 
 /** Load active triggers; rebuild the index + target sets and reconcile timers. */
 async function loadSubscriptions() {
@@ -138,29 +148,48 @@ async function pollPrices(): Promise<void> {
   let prices: Record<string, number> = {};
   try {
     const res = await fetch(`${JUPITER_PRICE_API}?ids=${mints.join(',')}`);
+    if (!res.ok) throw new Error(`price feed HTTP ${res.status}`);
     const body = await res.json();
     for (const [mint, info] of Object.entries(body.data ?? {})) {
       const price = Number((info as { price?: string }).price);
       if (Number.isFinite(price)) prices[mint] = price;
     }
+    if (priceFeedFailures >= PRICE_FEED_ALERT_AFTER) {
+      console.log(`[price] feed recovered after ${priceFeedFailures} failed poll(s)`);
+    }
+    priceFeedFailures = 0;
   } catch (err) {
-    console.error('[price] poll error:', err instanceof Error ? err.message : err);
+    priceFeedFailures += 1;
+    const detail = err instanceof Error ? err.message : String(err);
+    // Escalate once a sustained outage means price triggers can't fire at all.
+    if (priceFeedFailures >= PRICE_FEED_ALERT_AFTER) {
+      console.error(`[price] ⚠ FEED DOWN — ${priceFeedFailures} consecutive failures; ${priceWatches.length} price trigger(s) are blind: ${detail}`);
+    } else {
+      console.error(`[price] poll error (${priceFeedFailures}): ${detail}`);
+    }
     return;
   }
 
+  // Durable edge-state (Redis) so a restart can't re-fire an already-satisfied
+  // condition into a duplicate sell.
+  const prevStates = await getFiredStates(priceWatches.map((s) => s.workflowId));
+
   for (const sub of priceWatches) {
-    const price = prices[sub.config.mint as string];
-    if (price == null) continue;
+    const mint = sub.config.mint as string;
+    const price = prices[mint];
+    if (price == null) {
+      console.warn(`[price] no price for ${mint} — workflow ${sub.workflowId} can't evaluate this poll`);
+      continue;
+    }
     const target = Number(sub.config.targetPrice);
-    const above = (sub.config.direction ?? 'above') === 'above';
-    const satisfied = above ? price >= target : price <= target;
-    const prev = priceFired.get(sub.workflowId) ?? false;
-    priceFired.set(sub.workflowId, satisfied);
+    const satisfied = priceSatisfied(price, target, sub.config.direction as string | undefined);
+    const prev = prevStates.get(sub.workflowId) ?? false;
+    if (satisfied !== prev) await setFiredState(sub.workflowId, satisfied);
     if (satisfied && !prev) {
-      console.log(`[trigger] token_price_threshold ${sub.config.mint} @ ${price} → workflow ${sub.workflowId}`);
+      console.log(`[trigger] token_price_threshold ${mint} @ ${price} → workflow ${sub.workflowId}`);
       await enqueueExecution({
         workflowId: sub.workflowId,
-        triggerData: { triggerType: 'token_price_threshold', mint: sub.config.mint, price, targetPrice: target },
+        triggerData: { triggerType: 'token_price_threshold', mint, price, targetPrice: target },
       }).catch((err) => console.error('[price] enqueue error:', err));
     }
   }

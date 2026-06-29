@@ -22,8 +22,9 @@ export interface MatchData {
   // program/fixed-family enrichment
   accounts?: string[];
   logs?: string[];
-  // account-family enrichment
-  lamportsDelta?: number;
+  // account-family enrichment — change in the account's value (token amount for
+  // SPL token accounts, else lamports); sign indicates rewards (+) vs release (−).
+  valueDelta?: number;
   // slot-family
   slot?: number;
 }
@@ -50,6 +51,15 @@ const INSTRUCTION_FILTER: Record<string, RegExp> = {
   // Wormhole token bridge transfer instructions / core-bridge message post.
   cross_chain_token_transfer: /Instruction:\s*(Transfer(Native|Wrapped)?|PostMessage)|Sequence:/i,
 };
+
+/**
+ * Does a polled price satisfy a token_price_threshold condition? Pure so the
+ * stop-loss / take-profit firing logic is unit-testable. 'above' fires at/above
+ * the target (take-profit); 'below' fires at/below it (stop-loss).
+ */
+export function priceSatisfied(price: number, target: number, direction: string | undefined): boolean {
+  return (direction ?? 'above') === 'above' ? price >= target : price <= target;
+}
 
 const involves = (data: MatchData, address?: unknown): boolean =>
   typeof address === 'string' && Array.isArray(data.accounts) && data.accounts.includes(address);
@@ -90,9 +100,9 @@ export function matchSub(sub: Subscription, data: MatchData): boolean {
 
     case 'account':
       if (!ACCOUNT_TYPES.has(sub.triggerType)) return false;
-      // Rewards credited → balance rises; a vesting release → value leaves the account.
-      if (sub.triggerType === 'staking_rewards_earned') return typeof data.lamportsDelta === 'number' && data.lamportsDelta > 0;
-      if (sub.triggerType === 'token_vesting_release') return typeof data.lamportsDelta === 'number' && data.lamportsDelta < 0;
+      // Rewards credited → value rises; a vesting release → value leaves the account.
+      if (sub.triggerType === 'staking_rewards_earned') return typeof data.valueDelta === 'number' && data.valueDelta > 0;
+      if (sub.triggerType === 'token_vesting_release') return typeof data.valueDelta === 'number' && data.valueDelta < 0;
       return true; // liquidity_pool_balance_changed: any balance change
 
     case 'slot': {

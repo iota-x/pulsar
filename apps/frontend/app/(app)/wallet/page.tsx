@@ -18,6 +18,12 @@ const PERIOD_OPTIONS: { label: string; seconds: number }[] = [
 const periodLabel = (seconds: number): string =>
   PERIOD_OPTIONS.find((p) => p.seconds === seconds)?.label.replace(/^Per /, '').toLowerCase() ?? `${seconds}s`;
 
+/** Format a raw token amount (base units) into human UI units for display. */
+const fmtAmount = (raw: bigint, decimals: number): string => {
+  const ui = Number(raw) / 10 ** decimals;
+  return ui.toLocaleString(undefined, { maximumFractionDigits: Math.min(decimals, 6) });
+};
+
 export default function WalletPage() {
   const connection = useMemo(
     () => new Connection(process.env.NEXT_PUBLIC_SOLANA_RPC ?? 'https://api.devnet.solana.com', 'confirmed'),
@@ -191,6 +197,10 @@ export default function WalletPage() {
             Grant a <span className="text-slate-200">capped, time-limited</span> permission for one token.
             Your workflows can then move it automatically — never more than this cap.
           </p>
+          <p className="mt-2 rounded-lg border border-violet-400/20 bg-violet-500/[0.06] px-3 py-2 text-xs text-violet-200/90">
+            Pulsar charges a <span className="font-medium">0.5% fee</span> on each automated transfer, deducted on-chain —
+            the recipient receives the rest, and the fee counts toward your cap.
+          </p>
         </div>
         <label className="flex w-fit items-center gap-2 rounded-xl border border-cyan-400/20 bg-cyan-500/[0.06] px-3 py-2 text-sm text-slate-200">
           <input type="checkbox" className="h-4 w-4 accent-cyan-500" checked={solMode} onChange={(e) => setSolMode(e.target.checked)} />
@@ -248,8 +258,8 @@ export default function WalletPage() {
                       <p className="font-mono text-sm text-slate-200">{d.mint.slice(0, 10)}…{d.mint.slice(-6)}</p>
                       <p className="mt-1 text-xs text-slate-400">
                         {d.periodSeconds > 0
-                          ? `${d.windowAmount.toString()} / ${d.maxAmount.toString()} this ${periodLabel(d.periodSeconds)} (raw units)`
-                          : `used ${d.usedAmount.toString()} / cap ${d.maxAmount.toString()} (raw units)`}
+                          ? `${fmtAmount(d.windowAmount, d.decimals)} / ${fmtAmount(d.maxAmount, d.decimals)} this ${periodLabel(d.periodSeconds)}`
+                          : `used ${fmtAmount(d.usedAmount, d.decimals)} / cap ${fmtAmount(d.maxAmount, d.decimals)}`}
                         {' · '}
                         {d.expiry === 0 ? 'no expiry' : expired ? <span className="text-rose-400">expired</span> : `expires ${new Date(d.expiry * 1000).toLocaleDateString()}`}
                       </p>

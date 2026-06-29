@@ -11,7 +11,8 @@ const { prismaMock, handlerMock } = vi.hoisted(() => ({
 }));
 
 vi.mock('../prisma', () => ({ default: prismaMock }));
-vi.mock('../actions', () => ({ actionHandlers: { store_log: handlerMock } }));
+// store_log → custody 'none'; send_tokens → custody 'delegated' (moves user funds).
+vi.mock('../actions', () => ({ actionHandlers: { store_log: handlerMock, send_tokens: handlerMock } }));
 vi.mock('../notify', () => ({ notifyFailure: vi.fn().mockResolvedValue(undefined) }));
 
 import { executeWorkflow } from '../executor';
@@ -80,5 +81,44 @@ describe('executeWorkflow — exactly-once', () => {
     expect(prismaMock.log.update).toHaveBeenCalledWith(
       expect.objectContaining({ data: expect.objectContaining({ status: 'failed' }) }),
     );
+  });
+});
+
+describe('executeWorkflow — custody policy (non-custodial by default)', () => {
+  const delegatedWorkflow = (overrides: Record<string, unknown> = {}, walletAddress: string | null = 'UserWa11et') => ({
+    ...baseWorkflow,
+    user: { walletAddress },
+    actions: [{ id: 'a1', type: 'send_tokens', config: { to: 'Dest', mint: 'Mint', amount: 1, ...overrides }, order: 0 }],
+  });
+
+  beforeEach(() => prismaMock.log.create.mockResolvedValue({ id: 'log_d' }));
+
+  it("injects the author's verified wallet as owner for a delegated action", async () => {
+    prismaMock.workflow.findUnique.mockResolvedValue(delegatedWorkflow());
+    handlerMock.mockResolvedValue('sent');
+
+    await executeWorkflow({ workflowId: 'wf_1', triggerData: { triggerType: 'wallet_received_token', signature: 's' } });
+
+    expect(handlerMock).toHaveBeenCalledWith(expect.objectContaining({ owner: 'UserWa11et' }), expect.anything());
+  });
+
+  it('fails a delegated action when no wallet is linked (never silently spends operator funds)', async () => {
+    prismaMock.workflow.findUnique.mockResolvedValue(delegatedWorkflow({}, null));
+
+    await executeWorkflow({ workflowId: 'wf_1', triggerData: { triggerType: 'wallet_received_token', signature: 's' } });
+
+    expect(handlerMock).not.toHaveBeenCalled();
+    expect(prismaMock.log.update).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ status: 'failed' }) }),
+    );
+  });
+
+  it('respects an explicit operator-funded opt-out (no owner injected)', async () => {
+    prismaMock.workflow.findUnique.mockResolvedValue(delegatedWorkflow({ useDelegation: 'false' }));
+    handlerMock.mockResolvedValue('sent');
+
+    await executeWorkflow({ workflowId: 'wf_1', triggerData: { triggerType: 'wallet_received_token', signature: 's' } });
+
+    expect(handlerMock).toHaveBeenCalledWith(expect.not.objectContaining({ owner: expect.anything() }), expect.anything());
   });
 });

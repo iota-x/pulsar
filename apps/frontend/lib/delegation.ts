@@ -151,6 +151,7 @@ export interface DelegationInfo {
   periodSeconds: number;
   windowAmount: bigint;
   recipients: string[];
+  decimals: number;
 }
 
 /** Fetch all delegations owned by `owner` (memcmp on the owner field). */
@@ -177,7 +178,12 @@ export async function fetchDelegations(connection: Connection, owner: PublicKey)
       const start = 156 + i * 32;
       recipients.push(new PublicKey(d.subarray(start, start + 32)).toBase58());
     }
-    out.push({ pubkey: pubkey.toBase58(), mint, maxAmount, usedAmount, expiry, periodSeconds, windowAmount, recipients });
+    // Resolve decimals so the UI can show human amounts (wSOL is always 9).
+    const decimals =
+      mint === WSOL_MINT.toBase58()
+        ? 9
+        : await getMint(connection, new PublicKey(mint)).then((m) => m.decimals).catch(() => 0);
+    out.push({ pubkey: pubkey.toBase58(), mint, maxAmount, usedAmount, expiry, periodSeconds, windowAmount, recipients, decimals });
   }
   return out;
 }
