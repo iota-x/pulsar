@@ -18,6 +18,18 @@ export const PROGRAM_ID = new PublicKey(
   process.env.WEB3_ZAPIER_PROGRAM_ID ?? '3UDvaK5Xxa7JsGUF3peRzbgspk5ASUQxCQEfhibj7Rjs',
 );
 
+/**
+ * Treasury wallet that collects the platform fee skimmed inside the program's
+ * execute_delegated_transfer. Must match the on-chain TREASURY constant — the
+ * program rejects any other fee destination. Defaults to the operator wallet.
+ */
+export const TREASURY = new PublicKey(
+  process.env.TREASURY_PUBKEY ?? 'FgCiArPJfe9YCfW8Gioo87uoG7M9zXiPg8JvJHK3uTtJ',
+);
+
+/** Platform fee in basis points — MUST match the on-chain FEE_BPS constant. */
+export const FEE_BPS = 50;
+
 /** Anchor's 8-byte instruction discriminator: sha256("global:<name>")[..8]. */
 function discriminator(name: string): Buffer {
   return createHash('sha256').update(`global:${name}`).digest().subarray(0, 8);
@@ -103,6 +115,7 @@ export function buildDelegatedTransferIx(
   mint: PublicKey,
   source: PublicKey,
   destination: PublicKey,
+  feeDestination: PublicKey,
   amountRaw: bigint,
 ): TransactionInstruction {
   const signer = requireSigner();
@@ -113,10 +126,13 @@ export function buildDelegatedTransferIx(
   );
   return new TransactionInstruction({
     programId: PROGRAM_ID,
+    // Account order must match the ExecuteDelegatedTransfer struct: the treasury
+    // fee_destination sits right after destination.
     keys: [
       { pubkey: delegation, isSigner: false, isWritable: true },
       { pubkey: source, isSigner: false, isWritable: true },
       { pubkey: destination, isSigner: false, isWritable: true },
+      { pubkey: feeDestination, isSigner: false, isWritable: true },
       { pubkey: authority, isSigner: false, isWritable: false },
       { pubkey: signer.publicKey, isSigner: true, isWritable: false },
       { pubkey: TOKEN_PROGRAM_ID, isSigner: false, isWritable: false },
@@ -134,7 +150,9 @@ export async function callDelegatedTransfer(
   const signer = requireSigner();
   const source = await getAssociatedTokenAddress(mint, owner);
   const dest = await getOrCreateAssociatedTokenAccount(connection, signer, mint, recipient);
-  const ix = buildDelegatedTransferIx(owner, mint, source, dest.address, amountRaw);
+  // The treasury's ATA for this mint must exist to receive the platform fee.
+  const feeDest = await getOrCreateAssociatedTokenAccount(connection, signer, mint, TREASURY);
+  const ix = buildDelegatedTransferIx(owner, mint, source, dest.address, feeDest.address, amountRaw);
   const sig = await sendAndConfirmTransaction(connection, new Transaction().add(ix), [signer]);
   return explorerUrl(sig);
 }

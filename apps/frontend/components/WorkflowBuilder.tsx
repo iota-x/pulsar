@@ -8,6 +8,8 @@ import {
   TRIGGER_BY_TYPE,
   ACTION_BY_TYPE,
   placeholdersFor,
+  custodyOf,
+  requiresMainnet,
   type TriggerType,
   type ActionType,
   type Implementation,
@@ -53,6 +55,33 @@ function ImplBadge({ impl }: { impl: Implementation }) {
   };
   const [label, cls] = map[impl];
   return <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${cls}`}>{label}</span>;
+}
+
+const pill = 'rounded-full px-2 py-0.5 text-[10px] font-medium';
+
+/** Flags a primitive that needs mainnet to behave meaningfully (no devnet liquidity/data). */
+function NetworkBadge({ type }: { type: TriggerType | ActionType }) {
+  if (!requiresMainnet(type)) return null;
+  return (
+    <span className={`${pill} bg-rose-500/15 text-rose-400`} title="Needs mainnet — no real liquidity / market data on devnet">
+      Mainnet only
+    </span>
+  );
+}
+
+/** Shows whose funds an action moves: the user's (non-custodial) vs the platform's. */
+function CustodyBadge({ type }: { type: ActionType }) {
+  const custody = custodyOf(type);
+  if (custody === 'none') return null;
+  return custody === 'delegated' ? (
+    <span className={`${pill} bg-violet-500/15 text-violet-300`} title="Runs from your own wallet via a capped delegation — the platform never holds your keys">
+      Non-custodial
+    </span>
+  ) : (
+    <span className={`${pill} bg-slate-500/20 text-slate-300`} title="Signed and paid by the platform operator wallet">
+      Platform-signed
+    </span>
+  );
 }
 
 /** Render the dynamic config inputs for a trigger/action type. */
@@ -234,6 +263,7 @@ export function WorkflowBuilder({
           <span className="rounded bg-brand/20 px-2 py-0.5 text-xs font-medium text-brand">TRIGGER</span>
           <h2 className="font-semibold">When this happens…</h2>
           <ImplBadge impl={TRIGGER_BY_TYPE[triggerType].implementation} />
+          <NetworkBadge type={triggerType} />
         </div>
         <select
           className="input"
@@ -264,6 +294,8 @@ export function WorkflowBuilder({
                 </span>
                 <h2 className="font-semibold">…do this</h2>
                 <ImplBadge impl={ACTION_BY_TYPE[action.type].implementation} />
+                <CustodyBadge type={action.type} />
+                <NetworkBadge type={action.type} />
               </div>
               <div className="flex gap-1 text-xs">
                 <button className="btn-ghost px-2 py-1" onClick={() => move(i, -1)} disabled={i === 0}>
@@ -298,22 +330,27 @@ export function WorkflowBuilder({
                 <input
                   type="checkbox"
                   className="h-4 w-4 accent-violet-500"
-                  checked={action.config.useDelegation === 'true'}
-                  onChange={(e) => setActionField(i, 'useDelegation', e.target.checked ? 'true' : '')}
+                  checked={action.config.useDelegation === 'false'}
+                  onChange={(e) => setActionField(i, 'useDelegation', e.target.checked ? 'false' : '')}
                 />
-                {action.type === 'execute_buy_sell_order' ? (
-                  <span>
-                    Use my own wallet (delegated) — swaps <span className="font-medium text-violet-300">your</span> delegated
-                    token via Jupiter, capped by what you authorized. <span className="text-amber-300">Mainnet only.</span>
-                  </span>
-                ) : (
-                  <span>
-                    Use my own wallet (delegated) — moves the token from{' '}
-                    <span className="font-medium text-violet-300">your</span> linked wallet, capped by what you authorized.
-                  </span>
-                )}
+                <span>
+                  By default this runs <span className="font-medium text-violet-300">non-custodially</span> from your own
+                  linked wallet, capped by the delegation you authorized
+                  {action.type === 'execute_buy_sell_order' && <span className="text-amber-300"> (mainnet only)</span>}. Check
+                  to run it from the platform wallet instead (operator-funded).
+                </span>
               </label>
             )}
+            {/* Fee disclosure — the program skims 0.5% (FEE_BPS) on delegated runs. */}
+            {(action.type === 'send_tokens' ||
+              action.type === 'reward_user_tokens' ||
+              action.type === 'execute_buy_sell_order') &&
+              action.config.useDelegation !== 'false' && (
+                <p className="text-xs text-violet-300/80">
+                  A <span className="font-medium">0.5% platform fee</span> is taken on-chain from each run; the recipient
+                  receives the remainder.
+                </p>
+              )}
             <ConfigFields
               fields={ACTION_FIELDS[action.type]}
               config={action.config}

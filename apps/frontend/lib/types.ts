@@ -13,6 +13,8 @@ export {
   TEMPLATE_BY_ID,
   TRIGGER_PLACEHOLDERS,
   placeholdersFor,
+  custodyOf,
+  requiresMainnet,
 } from '@web3-zapier/shared';
 export type {
   TriggerType,
@@ -21,6 +23,8 @@ export type {
   CatalogEntry,
   CatalogField,
   WorkflowTemplate,
+  Custody,
+  NetworkReq,
 } from '@web3-zapier/shared';
 
 import type { TriggerType, ActionType } from '@web3-zapier/shared';

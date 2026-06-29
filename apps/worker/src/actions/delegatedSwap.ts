@@ -11,7 +11,7 @@ import {
   createAssociatedTokenAccountIdempotentInstruction,
 } from '@solana/spl-token';
 import { connection, getSigner, explorerUrl, toPublicKey } from '../solana';
-import { buildDelegatedTransferIx } from '../anchorProgram';
+import { buildDelegatedTransferIx, TREASURY, FEE_BPS } from '../anchorProgram';
 import type { ActionConfig } from '@web3-zapier/shared';
 
 const WSOL = new PublicKey('So11111111111111111111111111111111111111112');
@@ -62,15 +62,21 @@ export async function executeDelegatedSwap(config: ActionConfig): Promise<string
   const outputMint = side === 'sell' ? WSOL : token;
   const inputDecimals = inputMint.equals(WSOL) ? 9 : (await getMint(connection, inputMint)).decimals;
   const amountRaw = BigInt(Math.round(amount * 10 ** inputDecimals));
+  // The program skims FEE_BPS during the pull, so the operator only receives the
+  // NET input to swap. Mirror that here: quote/swap on net, but pull the gross
+  // (net → operator, fee → treasury) — the user's cap consumes the gross amount.
+  const feeRaw = (amountRaw * BigInt(FEE_BPS)) / 10_000n;
+  const netRaw = amountRaw - feeRaw;
 
   const recipient = config.to ? toPublicKey(config.to, 'recipient') : owner;
   const operatorInputAta = await getAssociatedTokenAddress(inputMint, signer.publicKey);
   const userInputAta = await getAssociatedTokenAddress(inputMint, owner);
+  const treasuryInputAta = await getAssociatedTokenAddress(inputMint, TREASURY);
   const recipientOutputAta = await getAssociatedTokenAddress(outputMint, recipient);
 
-  // 1. Quote
+  // 1. Quote — on the NET amount the operator will actually hold post-fee.
   const quote = await fetch(
-    `${JUPITER_API}/quote?inputMint=${inputMint}&outputMint=${outputMint}&amount=${amountRaw}&slippageBps=${slippageBps}`,
+    `${JUPITER_API}/quote?inputMint=${inputMint}&outputMint=${outputMint}&amount=${netRaw}&slippageBps=${slippageBps}`,
   ).then((r) => r.json());
   if (quote.error || !quote.outAmount) throw new Error(`No swap route: ${quote.error ?? 'Jupiter returned no route'}`);
 
@@ -92,12 +98,14 @@ export async function executeDelegatedSwap(config: ActionConfig): Promise<string
   const swapIx = deserIx(swapRes.swapInstruction);
   const cleanup: TransactionInstruction[] = swapRes.cleanupInstruction ? [deserIx(swapRes.cleanupInstruction)] : [];
 
-  // Ensure the operator's input ATA + recipient's output ATA exist, then pull.
+  // Ensure the operator's input ATA, the treasury's input ATA (fee), and the
+  // recipient's output ATA all exist, then pull the gross from the user.
   const ensure = [
     createAssociatedTokenAccountIdempotentInstruction(signer.publicKey, operatorInputAta, signer.publicKey, inputMint),
+    createAssociatedTokenAccountIdempotentInstruction(signer.publicKey, treasuryInputAta, TREASURY, inputMint),
     createAssociatedTokenAccountIdempotentInstruction(signer.publicKey, recipientOutputAta, recipient, outputMint),
   ];
-  const pullIx = buildDelegatedTransferIx(owner, inputMint, userInputAta, operatorInputAta, amountRaw);
+  const pullIx = buildDelegatedTransferIx(owner, inputMint, userInputAta, operatorInputAta, treasuryInputAta, amountRaw);
 
   // 3. Compose + send one atomic versioned transaction.
   const instructions = [...computeBudget, ...ensure, pullIx, ...setup, swapIx, ...cleanup];

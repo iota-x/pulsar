@@ -7,6 +7,7 @@
  */
 
 export * from './catalog';
+export * from './capabilities';
 import type { TriggerType, ActionType } from './catalog';
 
 // ---------------------------------------------------------------------------
