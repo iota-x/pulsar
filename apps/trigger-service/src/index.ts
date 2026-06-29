@@ -1,8 +1,10 @@
 import 'dotenv/config';
+import http from 'http';
 import { type TriggerConfig, type TriggerData, isTriggerType, solanaWsUrl, resolveNetwork } from '@web3-zapier/shared';
 import prisma from './prisma';
 import { enqueueExecution } from './queue';
 import { SolanaWatcher, type DetectedEvent } from './watcher';
+import { runWithLeaderElection, type LeaderHandle } from './leader';
 import {
   matchSub,
   priceSatisfied,
@@ -19,6 +21,7 @@ const RPC_URL = process.env.SOLANA_RPC_URL ?? 'https://api.devnet.solana.com';
 const WS_URL = solanaWsUrl(RPC_URL, process.env.SOLANA_WS_URL);
 const REFRESH_INTERVAL_MS = Number(process.env.REFRESH_INTERVAL_MS ?? 15000);
 const PRICE_POLL_MS = Number(process.env.PRICE_POLL_MS ?? 30000);
+const HEALTH_PORT = Number(process.env.HEALTH_PORT ?? 4100);
 const JUPITER_PRICE_API = process.env.JUPITER_PRICE_API ?? 'https://api.jup.ag/price/v2';
 
 // Trigger type → subscription family lives in ./match (shared with the matcher).
@@ -195,26 +198,84 @@ async function pollPrices(): Promise<void> {
   }
 }
 
-async function main() {
-  console.log(`🛰️  Trigger service starting (RPC: ${RPC_URL})`);
-  const watcher = new SolanaWatcher(RPC_URL, WS_URL, (event) => {
+// --- Active work (only the elected leader runs this) -------------------------
+let watcher: SolanaWatcher | null = null;
+let refreshTimer: NodeJS.Timeout | null = null;
+let priceTimer: NodeJS.Timeout | null = null;
+
+const EMPTY_TARGETS = {
+  wallets: new Set<string>(),
+  programs: new Set<string>(),
+  accounts: new Set<string>(),
+  slots: false,
+  fixedPrograms: new Map<string, string>(),
+  mints: new Set<string>(),
+};
+
+async function startWatching(): Promise<void> {
+  console.log('🛰️  leader active — starting watcher');
+  watcher = new SolanaWatcher(RPC_URL, WS_URL, (event) => {
     handleEvent(event).catch((err) => console.error('[trigger] handleEvent error:', err));
   });
-
   const refresh = async () => {
     try {
-      await watcher.sync(await loadSubscriptions());
+      await watcher!.sync(await loadSubscriptions());
     } catch (err) {
       console.error('[trigger] refresh error:', err);
     }
   };
-
   await refresh();
-  setInterval(refresh, REFRESH_INTERVAL_MS);
-  setInterval(() => void pollPrices(), PRICE_POLL_MS);
+  refreshTimer = setInterval(() => void refresh(), REFRESH_INTERVAL_MS);
+  priceTimer = setInterval(() => void pollPrices(), PRICE_POLL_MS);
   console.log(
     `🛰️  Watching ${index.size} target(s), ${scheduleTimers.size} schedule(s), ${priceWatches.length} price(s); refresh ${REFRESH_INTERVAL_MS}ms`,
   );
+}
+
+/** Tear down ALL active work so a deposed replica can never enqueue. */
+async function stopWatching(): Promise<void> {
+  console.log('🛑 standby — stopping watcher');
+  if (refreshTimer) clearInterval(refreshTimer);
+  if (priceTimer) clearInterval(priceTimer);
+  refreshTimer = priceTimer = null;
+  for (const t of scheduleTimers.values()) clearInterval(t);
+  scheduleTimers.clear();
+  if (watcher) {
+    try {
+      await watcher.sync(EMPTY_TARGETS); // unsubscribe everything
+    } catch {
+      /* best effort */
+    }
+    watcher = null;
+  }
+  index = new Map();
+  priceWatches = [];
+}
+
+let leaderHandle: LeaderHandle | null = null;
+
+async function main() {
+  console.log(`🛰️  Trigger service starting (RPC: ${RPC_URL}) — awaiting leadership`);
+
+  // Liveness/observability endpoint. A standby is healthy (correctly idle); the
+  // health is about process responsiveness, not leadership.
+  http
+    .createServer((_req, res) => {
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ ok: true, leader: leaderHandle?.isLeader ?? false, targets: index.size, priceWatches: priceWatches.length }));
+    })
+    .listen(HEALTH_PORT, () => console.log(`[health] listening on :${HEALTH_PORT}`));
+
+  leaderHandle = runWithLeaderElection({ onElected: startWatching, onDeposed: stopWatching });
+
+  // Graceful shutdown: release leadership promptly so failover is fast.
+  const shutdown = async () => {
+    console.log('[trigger] shutting down…');
+    await leaderHandle?.stop();
+    process.exit(0);
+  };
+  process.on('SIGTERM', () => void shutdown());
+  process.on('SIGINT', () => void shutdown());
 }
 
 process.on('unhandledRejection', (reason) =>

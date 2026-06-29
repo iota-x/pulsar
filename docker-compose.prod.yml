@@ -77,11 +77,24 @@ services:
       migrate:
         condition: service_completed_successfully
 
+  # Runs as 2 replicas for HA. Only the leader (Redis lock) watches/enqueues; if
+  # it dies, a standby takes over within the lock TTL (~12s) — so the watcher
+  # can't silently die. `init: true` gives a real PID 1 (tini) so SIGTERM reaches
+  # node and the leaving leader releases the lock immediately (faster failover).
   trigger:
     image: web3-zapier:latest
     command: npx tsx apps/trigger-service/src/index.ts
     env_file: .env
     restart: unless-stopped
+    init: true
+    deploy:
+      replicas: 2
+    healthcheck:
+      # No external port (replicas would clash) — health is checked in-container.
+      test: ['CMD', 'node', '-e', "require('http').get('http://localhost:4100/health',r=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
     depends_on:
       redis:
         condition: service_healthy
