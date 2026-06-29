@@ -52,6 +52,15 @@ const INSTRUCTION_FILTER: Record<string, RegExp> = {
   cross_chain_token_transfer: /Instruction:\s*(Transfer(Native|Wrapped)?|PostMessage)|Sequence:/i,
 };
 
+/**
+ * Does a polled price satisfy a token_price_threshold condition? Pure so the
+ * stop-loss / take-profit firing logic is unit-testable. 'above' fires at/above
+ * the target (take-profit); 'below' fires at/below it (stop-loss).
+ */
+export function priceSatisfied(price: number, target: number, direction: string | undefined): boolean {
+  return (direction ?? 'above') === 'above' ? price >= target : price <= target;
+}
+
 const involves = (data: MatchData, address?: unknown): boolean =>
   typeof address === 'string' && Array.isArray(data.accounts) && data.accounts.includes(address);
 

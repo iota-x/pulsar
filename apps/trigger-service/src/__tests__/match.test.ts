@@ -1,5 +1,24 @@
 import { describe, it, expect } from 'vitest';
-import { matchSub, type Subscription, type MatchData } from '../match';
+import { matchSub, priceSatisfied, type Subscription, type MatchData } from '../match';
+
+describe('priceSatisfied — stop-loss / take-profit crossing', () => {
+  it('stop-loss (below) fires at or under the target', () => {
+    expect(priceSatisfied(0.9, 1, 'below')).toBe(true); // dropped below
+    expect(priceSatisfied(1.0, 1, 'below')).toBe(true); // exactly at floor
+    expect(priceSatisfied(1.1, 1, 'below')).toBe(false); // still above
+  });
+
+  it('take-profit (above) fires at or over the target', () => {
+    expect(priceSatisfied(2.1, 2, 'above')).toBe(true);
+    expect(priceSatisfied(2.0, 2, 'above')).toBe(true);
+    expect(priceSatisfied(1.9, 2, 'above')).toBe(false);
+  });
+
+  it('defaults to above when direction is missing', () => {
+    expect(priceSatisfied(5, 4, undefined)).toBe(true);
+    expect(priceSatisfied(3, 4, undefined)).toBe(false);
+  });
+});
 
 const sub = (triggerType: string, config: Record<string, unknown> = {}): Subscription => ({
   workflowId: 'wf', triggerType, config,
