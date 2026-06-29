@@ -10,11 +10,13 @@ import {
 } from '@solana/web3.js';
 // Import only the Solana submodule — the package root pulls broken Cosmos deps.
 import * as wh from '@certusone/wormhole-sdk/lib/cjs/solana/wormhole';
-import { connection, getSigner, explorerUrl } from './solana';
+import { resolveNetwork } from '@web3-zapier/shared';
+import { connection, getSigner, explorerUrl, RPC_URL } from './solana';
 
-/** Wormhole Core Bridge (Solana devnet/testnet). Override via WORMHOLE_CORE_BRIDGE. */
+/** Wormhole Core Bridge — resolves devnet vs mainnet from the active RPC.
+ *  Override via WORMHOLE_CORE_BRIDGE for a custom deployment. */
 const CORE = new PublicKey(
-  process.env.WORMHOLE_CORE_BRIDGE ?? '3u8hJUVTA4jH1wYAyUur7FFZVQ8H635K3tSHHF4ssjQ5',
+  process.env.WORMHOLE_CORE_BRIDGE ?? resolveNetwork(RPC_URL).wormholeCoreBridge,
 );
 
 const u32le = (n: number): Buffer => {

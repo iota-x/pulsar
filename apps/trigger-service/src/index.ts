@@ -1,5 +1,5 @@
 import 'dotenv/config';
-import { type TriggerConfig, type TriggerData, isTriggerType, solanaWsUrl } from '@web3-zapier/shared';
+import { type TriggerConfig, type TriggerData, isTriggerType, solanaWsUrl, resolveNetwork } from '@web3-zapier/shared';
 import prisma from './prisma';
 import { enqueueExecution } from './queue';
 import { SolanaWatcher, type DetectedEvent } from './watcher';
@@ -21,11 +21,15 @@ const JUPITER_PRICE_API = process.env.JUPITER_PRICE_API ?? 'https://api.jup.ag/p
 
 // Trigger type → subscription family lives in ./match (shared with the matcher).
 
+// Cluster-specific program addresses resolve from SOLANA_RPC_URL (devnet vs
+// mainnet); an explicit env override still wins for custom/relocated programs.
+const net = resolveNetwork(RPC_URL);
+
 // Trigger types detected by watching a fixed well-known program's logs.
 const FIXED_PROGRAMS: Record<string, string> = {
-  nft_minted: 'metaqbxxUerdq28cj1RbAWkYQm3ybzjb6a8bt518x1s', // Metaplex Token Metadata
-  new_token_listing: process.env.RAYDIUM_CPMM_PROGRAM ?? 'DRaycpLY18LhpbydsBWbVJtxpNv9oXPgjRSfpF2bWpYb', // Raydium CPMM devnet
-  cross_chain_token_transfer: process.env.WORMHOLE_CORE_BRIDGE ?? '3u8hJUVTA4jH1wYAyUur7FFZVQ8H635K3tSHHF4ssjQ5',
+  nft_minted: net.metaplexTokenMetadata,
+  new_token_listing: process.env.RAYDIUM_CPMM_PROGRAM ?? net.raydiumCpmmProgram,
+  cross_chain_token_transfer: process.env.WORMHOLE_CORE_BRIDGE ?? net.wormholeCoreBridge,
 };
 
 /** Resolve the on-chain target string a trigger should subscribe to. */
