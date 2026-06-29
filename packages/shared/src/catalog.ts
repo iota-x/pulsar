@@ -609,6 +609,22 @@ export const WORKFLOW_TEMPLATES: WorkflowTemplate[] = [
     trigger: { type: 'scheduled_time', config: { intervalSeconds: '86400' } },
     actions: [{ type: 'execute_buy_sell_order', config: { side: 'buy', useDelegation: 'true' } }],
   },
+  {
+    id: 'stop-loss',
+    name: 'Stop-loss (auto-sell on drop)',
+    description: 'Automatically sell a token if its price falls below your floor — protect against dumps, hands-free.',
+    category: 'Trading',
+    trigger: { type: 'token_price_threshold', config: { direction: 'below' } },
+    actions: [{ type: 'execute_buy_sell_order', config: { side: 'sell' } }],
+  },
+  {
+    id: 'take-profit',
+    name: 'Take-profit (auto-sell on target)',
+    description: 'Automatically sell a token when its price rises above your target — lock in gains, hands-free.',
+    category: 'Trading',
+    trigger: { type: 'token_price_threshold', config: { direction: 'above' } },
+    actions: [{ type: 'execute_buy_sell_order', config: { side: 'sell' } }],
+  },
 ];
 
 export const TEMPLATE_BY_ID = Object.fromEntries(WORKFLOW_TEMPLATES.map((t) => [t.id, t])) as Record<string, WorkflowTemplate>;

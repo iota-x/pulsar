@@ -12,6 +12,7 @@ import { WalletContext } from '@/components/WalletContext';
 
 const nav = [
   { href: '/dashboard', label: 'Dashboard' },
+  { href: '/protect', label: 'Protect' },
   { href: '/workflows', label: 'Workflows' },
   { href: '/templates', label: 'Templates' },
   { href: '/history', label: 'History' },
