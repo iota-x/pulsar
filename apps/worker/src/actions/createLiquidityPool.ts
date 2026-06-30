@@ -55,9 +55,7 @@ export const createLiquidityPool: ActionHandler = async (config) => {
   });
 
   const programId = isDevnet ? DEVNET_PROGRAM_ID.CREATE_CPMM_POOL_PROGRAM : CREATE_CPMM_POOL_PROGRAM;
-  const poolFeeAccount = isDevnet
-    ? DEVNET_PROGRAM_ID.CREATE_CPMM_POOL_FEE_ACC
-    : CREATE_CPMM_POOL_FEE_ACC;
+  const poolFeeAccount = isDevnet ? DEVNET_PROGRAM_ID.CREATE_CPMM_POOL_FEE_ACC : CREATE_CPMM_POOL_FEE_ACC;
 
   const feeConfigs = await raydium.api.getCpmmConfigs();
   if (isDevnet) {

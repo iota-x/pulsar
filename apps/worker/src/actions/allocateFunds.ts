@@ -20,7 +20,8 @@ export const allocateFunds: ActionHandler = async (config) => {
   let total = 0;
   for (const t of targets as Array<{ to: string; amount: number }>) {
     const amount = Number(t.amount);
-    if (!t.to || !Number.isFinite(amount) || amount <= 0) throw new Error('allocate_funds: each target needs "to" and a positive "amount"');
+    if (!t.to || !Number.isFinite(amount) || amount <= 0)
+      throw new Error('allocate_funds: each target needs "to" and a positive "amount"');
     tx.add(
       SystemProgram.transfer({
         fromPubkey: signer.publicKey,

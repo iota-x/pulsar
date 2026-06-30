@@ -21,7 +21,11 @@ interface InjectedProvider {
 
 function getProvider(): InjectedProvider | null {
   if (typeof window === 'undefined') return null;
-  const w = window as unknown as { phantom?: { solana?: InjectedProvider }; solflare?: InjectedProvider; solana?: InjectedProvider };
+  const w = window as unknown as {
+    phantom?: { solana?: InjectedProvider };
+    solflare?: InjectedProvider;
+    solana?: InjectedProvider;
+  };
   return w.phantom?.solana ?? (w.solana?.isPhantom ? w.solana : undefined) ?? w.solflare ?? w.solana ?? null;
 }
 
@@ -96,7 +100,16 @@ export function WalletContext({ children }: { children: ReactNode }) {
 
   return (
     <Ctx.Provider
-      value={{ publicKey, connected: !!publicKey, connecting, installed, connect, disconnect, signMessage, sendTransaction }}
+      value={{
+        publicKey,
+        connected: !!publicKey,
+        connecting,
+        installed,
+        connect,
+        disconnect,
+        signMessage,
+        sendTransaction,
+      }}
     >
       {children}
     </Ctx.Provider>

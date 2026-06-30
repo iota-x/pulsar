@@ -63,7 +63,10 @@ const pill = 'rounded-full px-2 py-0.5 text-[10px] font-medium';
 function NetworkBadge({ type }: { type: TriggerType | ActionType }) {
   if (!requiresMainnet(type)) return null;
   return (
-    <span className={`${pill} bg-rose-500/15 text-rose-400`} title="Needs mainnet — no real liquidity / market data on devnet">
+    <span
+      className={`${pill} bg-rose-500/15 text-rose-400`}
+      title="Needs mainnet — no real liquidity / market data on devnet"
+    >
       Mainnet only
     </span>
   );
@@ -74,7 +77,10 @@ function CustodyBadge({ type }: { type: ActionType }) {
   const custody = custodyOf(type);
   if (custody === 'none') return null;
   return custody === 'delegated' ? (
-    <span className={`${pill} bg-violet-500/15 text-violet-300`} title="Runs from your own wallet via a capped delegation — the platform never holds your keys">
+    <span
+      className={`${pill} bg-violet-500/15 text-violet-300`}
+      title="Runs from your own wallet via a capped delegation — the platform never holds your keys"
+    >
       Non-custodial
     </span>
   ) : (
@@ -104,8 +110,8 @@ function ConfigFields({
     const el = inputRefs.current[key];
     const cur = config[key] ?? '';
     const focused = el && document.activeElement === el;
-    const start = focused ? el!.selectionStart ?? cur.length : cur.length;
-    const end = focused ? el!.selectionEnd ?? cur.length : cur.length;
+    const start = focused ? (el!.selectionStart ?? cur.length) : cur.length;
+    const end = focused ? (el!.selectionEnd ?? cur.length) : cur.length;
     const pad = !focused && cur && !cur.endsWith(' ') ? ' ' : '';
     const next = cur.slice(0, start) + pad + token + cur.slice(end);
     onChange(key, next);
@@ -249,11 +255,21 @@ export function WorkflowBuilder({
       <div className="card space-y-4">
         <div>
           <label className="label">Name</label>
-          <input className="input" value={name} onChange={(e) => setName(e.target.value)} placeholder="Whale wallet tracker" />
+          <input
+            className="input"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder="Whale wallet tracker"
+          />
         </div>
         <div>
           <label className="label">Description</label>
-          <input className="input" value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Optional" />
+          <input
+            className="input"
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
+            placeholder="Optional"
+          />
         </div>
       </div>
 
@@ -334,10 +350,10 @@ export function WorkflowBuilder({
                   onChange={(e) => setActionField(i, 'useDelegation', e.target.checked ? 'false' : '')}
                 />
                 <span>
-                  By default this runs <span className="font-medium text-violet-300">non-custodially</span> from your own
-                  linked wallet, capped by the delegation you authorized
-                  {action.type === 'execute_buy_sell_order' && <span className="text-amber-300"> (mainnet only)</span>}. Check
-                  to run it from the platform wallet instead (operator-funded).
+                  By default this runs <span className="font-medium text-violet-300">non-custodially</span> from your
+                  own linked wallet, capped by the delegation you authorized
+                  {action.type === 'execute_buy_sell_order' && <span className="text-amber-300"> (mainnet only)</span>}.
+                  Check to run it from the platform wallet instead (operator-funded).
                 </span>
               </label>
             )}
@@ -347,8 +363,8 @@ export function WorkflowBuilder({
               action.type === 'execute_buy_sell_order') &&
               action.config.useDelegation !== 'false' && (
                 <p className="text-xs text-violet-300/80">
-                  A <span className="font-medium">0.5% platform fee</span> is taken on-chain from each run; the recipient
-                  receives the remainder.
+                  A <span className="font-medium">0.5% platform fee</span> is taken on-chain from each run; the
+                  recipient receives the remainder.
                 </p>
               )}
             <ConfigFields

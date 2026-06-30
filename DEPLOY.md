@@ -58,6 +58,7 @@ nano .env
 ```
 
 In `.env`, set at minimum:
+
 - `PUBLIC_API_URL=http://YOUR_VM_IP:4000` and `CORS_ORIGIN=http://YOUR_VM_IP:3000`
 - `POSTGRES_PASSWORD` + the matching password inside `DATABASE_URL`
 - `JWT_SECRET` (a long random string)
@@ -85,6 +86,7 @@ Open **http://YOUR_VM_IP:3000** → sign up → build a workflow. The API is at
 
 To enable on-chain actions, fund the signer (see its pubkey in the worker logs:
 `[solana] signer loaded: …`):
+
 ```bash
 solana airdrop 2 <SIGNER_PUBKEY> --url devnet   # or https://faucet.solana.com
 ```
@@ -121,13 +123,13 @@ Caddy serves the frontend at `/` and proxies the API under `/api/*`. Visit
 
 ## Troubleshooting
 
-| Symptom | Fix |
-| --- | --- |
+| Symptom                           | Fix                                                                                                |
+| --------------------------------- | -------------------------------------------------------------------------------------------------- |
 | Frontend loads but API calls fail | `PUBLIC_API_URL` wrong → fix `.env`, **rebuild** (it's baked into the build). Check `CORS_ORIGIN`. |
-| `migrate` keeps restarting | DB not ready / wrong `DATABASE_URL` password. Check `docker compose logs postgres`. |
-| Build killed / OOM | VM has too little RAM — use ≥4 GB. |
-| On-chain actions are "simulated" | `SOLANA_SIGNER_SECRET_KEY` empty or unfunded. |
-| Public RPC 429s | Expected under load — add a free Helius/QuickNode RPC URL. |
+| `migrate` keeps restarting        | DB not ready / wrong `DATABASE_URL` password. Check `docker compose logs postgres`.                |
+| Build killed / OOM                | VM has too little RAM — use ≥4 GB.                                                                 |
+| On-chain actions are "simulated"  | `SOLANA_SIGNER_SECRET_KEY` empty or unfunded.                                                      |
+| Public RPC 429s                   | Expected under load — add a free Helius/QuickNode RPC URL.                                         |
 
 ## Notes on "free"
 
@@ -168,14 +170,14 @@ window elapses, so a compromised operator can drain at most one window's worth b
 the user notices and revokes — a much smaller blast radius than a lifetime cap.
 
 > **Account layout changed** with this feature. After upgrading the program, any
-> delegations created by the *previous* version must be revoked and re-created (their
+> delegations created by the _previous_ version must be revoked and re-created (their
 > on-chain accounts predate the new fields). On devnet just revoke + re-authorize from
 > the Wallet page.
 
 ## High availability (production)
 
-The single-VM setup survives *process/container* crashes (Docker `restart` + the
-watcher's leader election + Redis Sentinel) but not a *machine* failure. Everything is
+The single-VM setup survives _process/container_ crashes (Docker `restart` + the
+watcher's leader election + Redis Sentinel) but not a _machine_ failure. Everything is
 already built to span hosts — services coordinate through Redis, so going multi-host is
 **configuration, not code**:
 
@@ -193,7 +195,7 @@ already built to span hosts — services coordinate through Redis, so going mult
 
 3. **RPC** — a dead RPC blinds the watcher even when it's healthy. Give it 2+ providers
    (same cluster): `SOLANA_RPC_URLS=https://your-helius,https://your-alchemy`. It probes
-   the active endpoint and rotates on an unreachable *or* stalled node.
+   the active endpoint and rotates on an unreachable _or_ stalled node.
 
 4. **Workers** are stateless and horizontally scalable — run as many as you want. BullMQ
    distributes jobs and the worker's exactly-once claim prevents double-execution; no

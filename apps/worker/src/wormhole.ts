@@ -15,9 +15,7 @@ import { connection, getSigner, explorerUrl, RPC_URL } from './solana';
 
 /** Wormhole Core Bridge — resolves devnet vs mainnet from the active RPC.
  *  Override via WORMHOLE_CORE_BRIDGE for a custom deployment. */
-const CORE = new PublicKey(
-  process.env.WORMHOLE_CORE_BRIDGE ?? resolveNetwork(RPC_URL).wormholeCoreBridge,
-);
+const CORE = new PublicKey(process.env.WORMHOLE_CORE_BRIDGE ?? resolveNetwork(RPC_URL).wormholeCoreBridge);
 
 const u32le = (n: number): Buffer => {
   const b = Buffer.alloc(4);

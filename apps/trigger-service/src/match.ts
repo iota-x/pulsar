@@ -31,18 +31,33 @@ export interface MatchData {
 
 // Trigger type → which subscription family it belongs to.
 export const WALLET_TYPES = new Set([
-  'wallet_received_sol', 'wallet_received_token', 'wallet_received_nft', 'airdrop_detected',
-  'transaction_confirmed', 'wallet_balance_below_threshold', 'wallet_funded_by_address',
+  'wallet_received_sol',
+  'wallet_received_token',
+  'wallet_received_nft',
+  'airdrop_detected',
+  'transaction_confirmed',
+  'wallet_balance_below_threshold',
+  'wallet_funded_by_address',
   'token_swap_executed',
 ]);
 export const PROGRAM_TYPES = new Set([
-  'contract_event_emitted', 'contract_execution_failed', 'specific_contract_interaction',
-  'user_interacts_with_dapp', 'governance_vote_triggered',
+  'contract_event_emitted',
+  'contract_execution_failed',
+  'specific_contract_interaction',
+  'user_interacts_with_dapp',
+  'governance_vote_triggered',
 ]);
 export const PROGRAM_SUCCESS_TYPES = new Set([
-  'contract_event_emitted', 'specific_contract_interaction', 'user_interacts_with_dapp', 'governance_vote_triggered',
+  'contract_event_emitted',
+  'specific_contract_interaction',
+  'user_interacts_with_dapp',
+  'governance_vote_triggered',
 ]);
-export const ACCOUNT_TYPES = new Set(['liquidity_pool_balance_changed', 'staking_rewards_earned', 'token_vesting_release']);
+export const ACCOUNT_TYPES = new Set([
+  'liquidity_pool_balance_changed',
+  'staking_rewards_earned',
+  'token_vesting_release',
+]);
 
 /** Instruction-name patterns that identify the semantic event in a program's logs. */
 const INSTRUCTION_FILTER: Record<string, RegExp> = {
@@ -79,7 +94,8 @@ export function matchSub(sub: Subscription, data: MatchData): boolean {
       if (sub.triggerType !== data.triggerType) return false;
       if (sub.triggerType === 'nft_minted' && sub.config.collection) return involves(data, sub.config.collection);
       if (sub.triggerType === 'new_token_listing' && sub.config.mint) return involves(data, sub.config.mint);
-      if (sub.triggerType === 'cross_chain_token_transfer') return logsMatch(data, INSTRUCTION_FILTER.cross_chain_token_transfer);
+      if (sub.triggerType === 'cross_chain_token_transfer')
+        return logsMatch(data, INSTRUCTION_FILTER.cross_chain_token_transfer);
       return true;
 
     case 'mint': // nft_transferred for a specific mint (target already scopes the mint)
@@ -88,7 +104,8 @@ export function matchSub(sub: Subscription, data: MatchData): boolean {
     case 'program_success':
       if (!PROGRAM_SUCCESS_TYPES.has(sub.triggerType)) return false;
       // A governance vote is a specific instruction, not any successful tx.
-      if (sub.triggerType === 'governance_vote_triggered') return logsMatch(data, INSTRUCTION_FILTER.governance_vote_triggered);
+      if (sub.triggerType === 'governance_vote_triggered')
+        return logsMatch(data, INSTRUCTION_FILTER.governance_vote_triggered);
       // Optional wallet filter: only fire for the configured user's interaction.
       if (sub.triggerType === 'user_interacts_with_dapp' || sub.triggerType === 'specific_contract_interaction') {
         return !sub.config.wallet || involves(data, sub.config.wallet);
@@ -101,8 +118,10 @@ export function matchSub(sub: Subscription, data: MatchData): boolean {
     case 'account':
       if (!ACCOUNT_TYPES.has(sub.triggerType)) return false;
       // Rewards credited → value rises; a vesting release → value leaves the account.
-      if (sub.triggerType === 'staking_rewards_earned') return typeof data.valueDelta === 'number' && data.valueDelta > 0;
-      if (sub.triggerType === 'token_vesting_release') return typeof data.valueDelta === 'number' && data.valueDelta < 0;
+      if (sub.triggerType === 'staking_rewards_earned')
+        return typeof data.valueDelta === 'number' && data.valueDelta > 0;
+      if (sub.triggerType === 'token_vesting_release')
+        return typeof data.valueDelta === 'number' && data.valueDelta < 0;
       return true; // liquidity_pool_balance_changed: any balance change
 
     case 'slot': {
@@ -123,7 +142,9 @@ export function matchSub(sub: Subscription, data: MatchData): boolean {
       }
       if (
         sub.config.mint &&
-        (data.triggerType === 'wallet_received_token' || data.triggerType === 'wallet_received_nft' || data.triggerType === 'airdrop_detected')
+        (data.triggerType === 'wallet_received_token' ||
+          data.triggerType === 'wallet_received_nft' ||
+          data.triggerType === 'airdrop_detected')
       ) {
         if (data.mint !== sub.config.mint) return false;
       }

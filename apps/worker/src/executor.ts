@@ -92,7 +92,12 @@ export async function executeWorkflow(job: ExecutionJob): Promise<void> {
 
   for (const action of workflow.actions) {
     if (!isActionType(action.type)) {
-      results.push({ actionId: action.id, type: action.type as never, status: 'failed', detail: 'Unknown action type' });
+      results.push({
+        actionId: action.id,
+        type: action.type as never,
+        status: 'failed',
+        detail: 'Unknown action type',
+      });
       continue;
     }
 
@@ -102,9 +107,7 @@ export async function executeWorkflow(job: ExecutionJob): Promise<void> {
     if (!handler) {
       const entry = ACTION_BY_TYPE[action.type];
       const reason =
-        entry.implementation === 'smart_contract'
-          ? 'requires on-chain signer (Anchor program)'
-          : 'not yet implemented';
+        entry.implementation === 'smart_contract' ? 'requires on-chain signer (Anchor program)' : 'not yet implemented';
       const detail = `Simulated "${entry.label}" — ${reason}`;
       results.push({ actionId: action.id, type: action.type, status: 'simulated', detail });
       console.log(`[executor] ~ ${action.type}: ${detail}`);
@@ -143,8 +146,7 @@ export async function executeWorkflow(job: ExecutionJob): Promise<void> {
 
   const failures = results.filter((r) => r.status === 'failed').length;
   const succeeded = results.length - failures;
-  const status: LogStatus =
-    failures === 0 ? 'success' : succeeded === 0 ? 'failed' : 'partial';
+  const status: LogStatus = failures === 0 ? 'success' : succeeded === 0 ? 'failed' : 'partial';
 
   await prisma.log.update({
     where: { id: logId },

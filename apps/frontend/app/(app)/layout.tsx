@@ -39,45 +39,45 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
   return (
     <WalletContext>
-    <div className="relative min-h-screen">
-      <AuroraBackground grid={false} />
+      <div className="relative min-h-screen">
+        <AuroraBackground grid={false} />
 
-      <header
-        className="sticky top-0 z-40 border-b border-white/[0.06] backdrop-blur-xl"
-        style={{ background: 'color-mix(in srgb, var(--bg) 72%, transparent)' }}
-      >
-        <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-3">
-          <div className="flex items-center gap-8">
-            <Logo href="/dashboard" />
-            <nav className="hidden items-center gap-1 md:flex">
-              {nav.map((item) => {
-                const active = pathname.startsWith(item.href);
-                return (
-                  <Link
-                    key={item.href}
-                    href={item.href}
-                    className={`rounded-lg px-3 py-1.5 text-sm transition ${
-                      active ? 'bg-white/10 text-white' : 'text-slate-400 hover:text-white'
-                    }`}
-                  >
-                    {item.label}
-                  </Link>
-                );
-              })}
-            </nav>
+        <header
+          className="sticky top-0 z-40 border-b border-white/[0.06] backdrop-blur-xl"
+          style={{ background: 'color-mix(in srgb, var(--bg) 72%, transparent)' }}
+        >
+          <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-3">
+            <div className="flex items-center gap-8">
+              <Logo href="/dashboard" />
+              <nav className="hidden items-center gap-1 md:flex">
+                {nav.map((item) => {
+                  const active = pathname.startsWith(item.href);
+                  return (
+                    <Link
+                      key={item.href}
+                      href={item.href}
+                      className={`rounded-lg px-3 py-1.5 text-sm transition ${
+                        active ? 'bg-white/10 text-white' : 'text-slate-400 hover:text-white'
+                      }`}
+                    >
+                      {item.label}
+                    </Link>
+                  );
+                })}
+              </nav>
+            </div>
+            <div className="flex items-center gap-3 text-sm">
+              <span className="hidden text-slate-400 sm:inline">{user?.email}</span>
+              <ThemeToggle />
+              <button onClick={logout} className="btn-ghost py-1.5">
+                Logout
+              </button>
+            </div>
           </div>
-          <div className="flex items-center gap-3 text-sm">
-            <span className="hidden text-slate-400 sm:inline">{user?.email}</span>
-            <ThemeToggle />
-            <button onClick={logout} className="btn-ghost py-1.5">
-              Logout
-            </button>
-          </div>
-        </div>
-      </header>
+        </header>
 
-      <main className="mx-auto max-w-6xl px-4 py-10">{children}</main>
-    </div>
+        <main className="mx-auto max-w-6xl px-4 py-10">{children}</main>
+      </div>
     </WalletContext>
   );
 }

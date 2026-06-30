@@ -14,14 +14,14 @@ of **actions** (send a Discord message, call a webhook, send an email, store a l
 
 A Turborepo monorepo of independent services that communicate through Postgres and a Redis queue:
 
-| Service | Path | Responsibility |
-| --- | --- | --- |
-| **Frontend** | `apps/frontend` | Next.js UI — auth, dashboard, workflow builder, execution history |
-| **Backend API** | `apps/backend` | Express + Prisma — auth (JWT), workflow CRUD, dashboard stats, logs |
+| Service             | Path                   | Responsibility                                                              |
+| ------------------- | ---------------------- | --------------------------------------------------------------------------- |
+| **Frontend**        | `apps/frontend`        | Next.js UI — auth, dashboard, workflow builder, execution history           |
+| **Backend API**     | `apps/backend`         | Express + Prisma — auth (JWT), workflow CRUD, dashboard stats, logs         |
 | **Trigger service** | `apps/trigger-service` | Subscribes to Solana via websocket, matches active workflows, enqueues jobs |
-| **Worker** | `apps/worker` | BullMQ consumer — loads a workflow, runs its actions in order, writes a log |
-| **Shared** | `packages/shared` | Source-of-truth types: trigger/action types, job payload, queue name |
-| **Smart contracts** | `apps/smart-contracts` | Anchor program skeleton (on-chain triggers/actions, future work) |
+| **Worker**          | `apps/worker`          | BullMQ consumer — loads a workflow, runs its actions in order, writes a log |
+| **Shared**          | `packages/shared`      | Source-of-truth types: trigger/action types, job payload, queue name        |
+| **Smart contracts** | `apps/smart-contracts` | Anchor program skeleton (on-chain triggers/actions, future work)            |
 
 ```
                 ┌──────────────┐        enqueue        ┌──────────┐
@@ -97,23 +97,24 @@ governance, deploy, oracle update, cross-chain, …).
 What runs for real today vs. simulated:
 
 - **All 23 triggers are wired** and detected over raw RPC websockets (no API key):
-  - *wallet* (`config.wallet`): `wallet_received_sol`, `wallet_received_token`, `wallet_received_nft`,
+  - _wallet_ (`config.wallet`): `wallet_received_sol`, `wallet_received_token`, `wallet_received_nft`,
     `airdrop_detected`, `transaction_confirmed`, `wallet_balance_below_threshold`,
     `wallet_funded_by_address` (resolves the sender), `token_swap_executed` (DEX program seen in the
     wallet's tx logs).
-  - *program logs* (`config.programId`): `contract_event_emitted`, `contract_execution_failed`,
+  - _program logs_ (`config.programId`): `contract_event_emitted`, `contract_execution_failed`,
     `specific_contract_interaction`, `user_interacts_with_dapp`, `governance_vote_triggered`.
-  - *fixed programs*: `nft_minted` (Metaplex Token Metadata), `new_token_listing` (Raydium CPMM),
+  - _fixed programs_: `nft_minted` (Metaplex Token Metadata), `new_token_listing` (Raydium CPMM),
     `cross_chain_token_transfer` (Wormhole Core Bridge).
-  - *account / mint changes*: `liquidity_pool_balance_changed` (poolAddress), `staking_rewards_earned`
+  - _account / mint changes_: `liquidity_pool_balance_changed` (poolAddress), `staking_rewards_earned`
     (stakeAccount), `token_vesting_release` (vestingAccount), `nft_transferred` (a mint's token
     accounts).
-  - *other*: `new_block_mined` (slot subscription), `scheduled_time` (interval timer),
+  - _other_: `new_block_mined` (slot subscription), `scheduled_time` (interval timer),
     `token_price_threshold` (Jupiter price poll).
 
   A few only fire under specific real conditions that are hard to reproduce on devnet: `nft_minted`
   needs a Metaplex-metadata mint, `token_swap_executed` needs devnet DEX liquidity. The detection
   mechanisms are identical to the proven ones.
+
 - **Actions executed for real**: `send_webhook`, `send_discord_message`, `send_email`,
   `send_notification`, `record_transaction_db`, `fetch_latest_transactions`, `store_log`, the
   **on-chain SPL actions** `send_tokens` (native SOL or SPL), `mint_tokens`, `burn_tokens`,
@@ -170,6 +171,7 @@ npm run mint:create            # 2. create a test SPL mint (prints a mint addres
 #                                   to: <signer pubkey>, amount: 100 — then ▶ Run now
 #                                4. burn_tokens / send_tokens / transfer_nft work the same way
 ```
+
 `send_tokens` needs no mint for native SOL. `transfer_nft` needs a 0-decimal mint
 (`npm run mint:create 0`) that the signer holds 1 of.
 
@@ -199,21 +201,21 @@ up to upgrade in place later.
 
 ## REST API
 
-| Method | Path | Description |
-| --- | --- | --- |
-| POST | `/auth/register` | Create account → `{ token, user }` |
-| POST | `/auth/login` | Log in → `{ token, user }` |
-| GET | `/auth/me` | Current user |
-| GET | `/dashboard` | Workflow + execution stats |
-| POST | `/workflows` | Create workflow (trigger + actions inline) |
-| GET | `/workflows` | List workflows |
-| GET | `/workflows/:id` | Workflow with trigger, actions, recent logs |
-| PUT | `/workflows/:id` | Update workflow / trigger / actions |
-| PATCH | `/workflows/:id/active` | Activate / deactivate |
-| POST | `/workflows/:id/run` | Manually enqueue an execution (testing) |
-| DELETE | `/workflows/:id` | Delete workflow |
-| GET | `/logs` | All execution logs for the user |
-| GET | `/logs/:workflowId` | Logs for one workflow |
+| Method | Path                    | Description                                 |
+| ------ | ----------------------- | ------------------------------------------- |
+| POST   | `/auth/register`        | Create account → `{ token, user }`          |
+| POST   | `/auth/login`           | Log in → `{ token, user }`                  |
+| GET    | `/auth/me`              | Current user                                |
+| GET    | `/dashboard`            | Workflow + execution stats                  |
+| POST   | `/workflows`            | Create workflow (trigger + actions inline)  |
+| GET    | `/workflows`            | List workflows                              |
+| GET    | `/workflows/:id`        | Workflow with trigger, actions, recent logs |
+| PUT    | `/workflows/:id`        | Update workflow / trigger / actions         |
+| PATCH  | `/workflows/:id/active` | Activate / deactivate                       |
+| POST   | `/workflows/:id/run`    | Manually enqueue an execution (testing)     |
+| DELETE | `/workflows/:id`        | Delete workflow                             |
+| GET    | `/logs`                 | All execution logs for the user             |
+| GET    | `/logs/:workflowId`     | Logs for one workflow                       |
 
 All routes except `/auth/register`, `/auth/login` and `/health` require `Authorization: Bearer <token>`.
 

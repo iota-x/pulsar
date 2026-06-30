@@ -36,14 +36,17 @@ export const stakeUnstake: ActionHandler = async (config) => {
 
   // --- stake ---
   const amount = Number(config.amount);
-  if (!Number.isFinite(amount) || amount <= 0) throw new Error('stake_unstake_tokens: valid "amount" is required to stake');
+  if (!Number.isFinite(amount) || amount <= 0)
+    throw new Error('stake_unstake_tokens: valid "amount" is required to stake');
 
   // The Stake program enforces a network minimum delegation (1 SOL on most
   // clusters). Check it up-front so the user gets a clear message.
   const { value: minDelegationLamports } = await connection.getStakeMinimumDelegation();
   const minSol = minDelegationLamports / LAMPORTS_PER_SOL;
   if (amount * LAMPORTS_PER_SOL < minDelegationLamports) {
-    throw new Error(`stake_unstake_tokens: amount ${amount} SOL is below the network minimum delegation of ${minSol} SOL`);
+    throw new Error(
+      `stake_unstake_tokens: amount ${amount} SOL is below the network minimum delegation of ${minSol} SOL`,
+    );
   }
 
   // Resolve the validator vote account (explicit, or the first active one).

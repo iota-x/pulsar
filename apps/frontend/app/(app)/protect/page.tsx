@@ -11,8 +11,18 @@ import { api } from '@/lib/api';
 type Mode = 'stop_loss' | 'take_profit';
 
 const MODES: Record<Mode, { label: string; verb: string; direction: 'below' | 'above'; hint: string }> = {
-  stop_loss: { label: 'Stop-loss', verb: 'falls below', direction: 'below', hint: 'Cap your downside — sell automatically if the price drops.' },
-  take_profit: { label: 'Take-profit', verb: 'rises above', direction: 'above', hint: 'Lock in gains — sell automatically when the price hits your target.' },
+  stop_loss: {
+    label: 'Stop-loss',
+    verb: 'falls below',
+    direction: 'below',
+    hint: 'Cap your downside — sell automatically if the price drops.',
+  },
+  take_profit: {
+    label: 'Take-profit',
+    verb: 'rises above',
+    direction: 'above',
+    hint: 'Lock in gains — sell automatically when the price hits your target.',
+  },
 };
 
 export default function ProtectPage() {
@@ -34,7 +44,9 @@ export default function ProtectPage() {
 
   useEffect(() => {
     if (!publicKey) return setDelegations([]);
-    fetchDelegations(connection, publicKey).then(setDelegations).catch(() => {});
+    fetchDelegations(connection, publicKey)
+      .then(setDelegations)
+      .catch(() => {});
   }, [publicKey, connection]);
 
   // Is there a live (unexpired) delegation covering the token we're protecting?
@@ -84,14 +96,17 @@ export default function ProtectPage() {
         <h1 className="font-display text-3xl font-bold tracking-tight text-white">Protect a token</h1>
         <p className="mt-1 text-sm text-slate-400">
           Set a price-triggered auto-sell. When your target is hit, Pulsar swaps the token through Jupiter —
-          <span className="text-slate-200"> from your own wallet, non-custodially</span>, capped by the delegation you authorized.
+          <span className="text-slate-200"> from your own wallet, non-custodially</span>, capped by the delegation you
+          authorized.
         </p>
       </div>
 
       {msg && (
         <div
           className={`rounded-xl border px-4 py-3 text-sm ${
-            msg.kind === 'ok' ? 'border-emerald-500/20 bg-emerald-500/10 text-emerald-300' : 'border-rose-500/20 bg-rose-500/10 text-rose-300'
+            msg.kind === 'ok'
+              ? 'border-emerald-500/20 bg-emerald-500/10 text-emerald-300'
+              : 'border-rose-500/20 bg-rose-500/10 text-rose-300'
           }`}
         >
           {msg.text}
@@ -117,10 +132,17 @@ export default function ProtectPage() {
 
         <div>
           <label className="label">Token mint</label>
-          <input className="input" placeholder="SPL token mint address" value={mint} onChange={(e) => setMint(e.target.value)} />
+          <input
+            className="input"
+            placeholder="SPL token mint address"
+            value={mint}
+            onChange={(e) => setMint(e.target.value)}
+          />
           {connected && mint.trim() && (
             <p className={`mt-1 text-xs ${delegated ? 'text-emerald-400' : 'text-amber-300'}`}>
-              {delegated ? '✓ delegation active for this token' : '⚠ no delegation for this token yet — authorize one on the Wallet page'}
+              {delegated
+                ? '✓ delegation active for this token'
+                : '⚠ no delegation for this token yet — authorize one on the Wallet page'}
             </p>
           )}
         </div>
@@ -128,11 +150,23 @@ export default function ProtectPage() {
         <div className="grid gap-3 sm:grid-cols-2">
           <div>
             <label className="label">Amount to sell (tokens)</label>
-            <input className="input" type="number" placeholder="e.g. 1000" value={amount} onChange={(e) => setAmount(e.target.value)} />
+            <input
+              className="input"
+              type="number"
+              placeholder="e.g. 1000"
+              value={amount}
+              onChange={(e) => setAmount(e.target.value)}
+            />
           </div>
           <div>
             <label className="label">Trigger price (USD)</label>
-            <input className="input" type="number" placeholder={mode === 'stop_loss' ? 'sell if it drops to…' : 'sell if it climbs to…'} value={price} onChange={(e) => setPrice(e.target.value)} />
+            <input
+              className="input"
+              type="number"
+              placeholder={mode === 'stop_loss' ? 'sell if it drops to…' : 'sell if it climbs to…'}
+              value={price}
+              onChange={(e) => setPrice(e.target.value)}
+            />
           </div>
         </div>
 

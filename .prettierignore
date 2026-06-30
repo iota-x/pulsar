@@ -1,0 +1,13 @@
+# Dependencies
+node_modules/
+
+# Build output
+**/dist/
+**/.next/
+apps/smart-contracts/web3-zapier/target/
+
+# Generated
+**/next-env.d.ts
+
+# Lockfiles
+package-lock.json

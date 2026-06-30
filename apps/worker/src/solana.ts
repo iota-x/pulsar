@@ -29,9 +29,7 @@ export function getSigner(): Keypair | null {
   }
 
   try {
-    const bytes = raw.startsWith('[')
-      ? Uint8Array.from(JSON.parse(raw) as number[])
-      : bs58.decode(raw);
+    const bytes = raw.startsWith('[') ? Uint8Array.from(JSON.parse(raw) as number[]) : bs58.decode(raw);
     signer = Keypair.fromSecretKey(bytes);
     console.log(`[solana] signer loaded: ${signer.publicKey.toBase58()}`);
   } catch (err) {
@@ -51,11 +49,7 @@ export function toPublicKey(value: unknown, label: string): PublicKey {
 }
 
 function clusterQuery(): string {
-  return RPC_URL.includes('devnet')
-    ? '?cluster=devnet'
-    : RPC_URL.includes('testnet')
-      ? '?cluster=testnet'
-      : '';
+  return RPC_URL.includes('devnet') ? '?cluster=devnet' : RPC_URL.includes('testnet') ? '?cluster=testnet' : '';
 }
 
 /** Block explorer URL for a signature on the active cluster. */

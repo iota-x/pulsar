@@ -31,11 +31,17 @@ export default function WorkflowDetailPage() {
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [error, setError] = useState('');
   const [msg, setMsg] = useState('');
-  const [plan, setPlan] = useState<{ ok: boolean; plan: { type: string; status: string; detail?: string }[] } | null>(null);
+  const [plan, setPlan] = useState<{ ok: boolean; plan: { type: string; status: string; detail?: string }[] } | null>(
+    null,
+  );
 
   const load = () => {
-    api<Workflow>(`/workflows/${id}`).then(setWf).catch((e) => setError(e.message));
-    api<LogEntry[]>(`/logs/${id}`).then(setLogs).catch(() => {});
+    api<Workflow>(`/workflows/${id}`)
+      .then(setWf)
+      .catch((e) => setError(e.message));
+    api<LogEntry[]>(`/logs/${id}`)
+      .then(setLogs)
+      .catch(() => {});
   };
   useEffect(load, [id]);
 
@@ -127,11 +133,7 @@ export default function WorkflowDetailPage() {
         {wf.actions?.map((a) => (
           <div key={a.id} className="flex w-full flex-col items-center gap-2">
             <span className="text-slate-600">↓</span>
-            <FlowNode
-              kind="action"
-              title={ACTION_LABELS[a.type as ActionType]}
-              subtitle={summarize(a.config)}
-            />
+            <FlowNode kind="action" title={ACTION_LABELS[a.type as ActionType]} subtitle={summarize(a.config)} />
           </div>
         ))}
       </div>

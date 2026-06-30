@@ -1,10 +1,7 @@
 import { Connection, PublicKey } from '@solana/web3.js';
 import type { ActionHandler } from './types';
 
-const connection = new Connection(
-  process.env.SOLANA_RPC_URL ?? 'https://api.devnet.solana.com',
-  'confirmed',
-);
+const connection = new Connection(process.env.SOLANA_RPC_URL ?? 'https://api.devnet.solana.com', 'confirmed');
 
 /** Fetch the most recent transaction signatures for an address from the chain. */
 export const fetchLatestTransactions: ActionHandler = async (config, triggerData) => {

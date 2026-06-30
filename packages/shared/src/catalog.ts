@@ -82,7 +82,16 @@ export const TRIGGER_CATALOG: CatalogEntry<TriggerType>[] = [
     label: 'Wallet receives SOL',
     description: 'Fires when a watched wallet receives native SOL.',
     implementation: 'api',
-    fields: [wallet, { key: 'minAmount', label: 'Min SOL', type: 'number', placeholder: 'e.g. 0.1', help: 'Only fire above this amount' }],
+    fields: [
+      wallet,
+      {
+        key: 'minAmount',
+        label: 'Min SOL',
+        type: 'number',
+        placeholder: 'e.g. 0.1',
+        help: 'Only fire above this amount',
+      },
+    ],
   },
   {
     type: 'wallet_received_token',
@@ -117,7 +126,10 @@ export const TRIGGER_CATALOG: CatalogEntry<TriggerType>[] = [
     label: 'Wallet balance drops below threshold',
     description: "Triggers when a wallet's SOL balance falls below a set amount.",
     implementation: 'api',
-    fields: [wallet, { key: 'threshold', label: 'Threshold (SOL)', type: 'number', placeholder: 'e.g. 1.0', required: true }],
+    fields: [
+      wallet,
+      { key: 'threshold', label: 'Threshold (SOL)', type: 'number', placeholder: 'e.g. 1.0', required: true },
+    ],
   },
   {
     type: 'contract_event_emitted',
@@ -131,14 +143,25 @@ export const TRIGGER_CATALOG: CatalogEntry<TriggerType>[] = [
     label: 'NFT is transferred',
     description: 'Monitors transfers of a specific NFT.',
     implementation: 'smart_contract',
-    fields: [{ ...mint, label: 'NFT mint', required: true }, { key: 'wallet', label: 'Wallet (optional)', placeholder: 'Filter by wallet' }],
+    fields: [
+      { ...mint, label: 'NFT mint', required: true },
+      { key: 'wallet', label: 'Wallet (optional)', placeholder: 'Filter by wallet' },
+    ],
   },
   {
     type: 'new_block_mined',
     label: 'New block is mined',
     description: 'Triggers when a new block / slot is produced on Solana.',
     implementation: 'api',
-    fields: [{ key: 'everyNthSlot', label: 'Every N slots', type: 'number', placeholder: 'e.g. 1000', help: 'Throttle how often this fires' }],
+    fields: [
+      {
+        key: 'everyNthSlot',
+        label: 'Every N slots',
+        type: 'number',
+        placeholder: 'e.g. 1000',
+        help: 'Throttle how often this fires',
+      },
+    ],
   },
   {
     type: 'token_price_threshold',
@@ -212,7 +235,9 @@ export const TRIGGER_CATALOG: CatalogEntry<TriggerType>[] = [
     label: 'Scheduled time trigger',
     description: 'Executes the workflow on a fixed interval.',
     implementation: 'api',
-    fields: [{ key: 'intervalSeconds', label: 'Interval (seconds)', type: 'number', placeholder: 'e.g. 3600', required: true }],
+    fields: [
+      { key: 'intervalSeconds', label: 'Interval (seconds)', type: 'number', placeholder: 'e.g. 3600', required: true },
+    ],
   },
   {
     type: 'airdrop_detected',
@@ -294,8 +319,19 @@ export const ACTION_CATALOG: CatalogEntry<ActionType>[] = [
     description: 'Posts a message to a Discord channel via a webhook.',
     implementation: 'api',
     fields: [
-      { key: 'webhookUrl', label: 'Discord webhook URL', placeholder: 'https://discord.com/api/webhooks/…', required: true },
-      { key: 'content', label: 'Message', placeholder: '⚡ {triggerType} on {wallet}', help: 'Use {placeholders} from trigger data', templated: true },
+      {
+        key: 'webhookUrl',
+        label: 'Discord webhook URL',
+        placeholder: 'https://discord.com/api/webhooks/…',
+        required: true,
+      },
+      {
+        key: 'content',
+        label: 'Message',
+        placeholder: '⚡ {triggerType} on {wallet}',
+        help: 'Use {placeholders} from trigger data',
+        templated: true,
+      },
     ],
   },
   {
@@ -323,7 +359,13 @@ export const ACTION_CATALOG: CatalogEntry<ActionType>[] = [
     implementation: 'api',
     fields: [
       { key: 'channel', label: 'Channel', type: 'select', options: ['in_app', 'webhook'] },
-      { key: 'message', label: 'Message', placeholder: 'Notification text', help: 'Use {placeholders} from trigger data', templated: true },
+      {
+        key: 'message',
+        label: 'Message',
+        placeholder: 'Notification text',
+        help: 'Use {placeholders} from trigger data',
+        templated: true,
+      },
       { key: 'url', label: 'Webhook URL (if channel = webhook)', placeholder: 'https://…' },
     ],
   },
@@ -436,7 +478,11 @@ export const ACTION_CATALOG: CatalogEntry<ActionType>[] = [
     fields: [
       { key: 'mode', label: 'Mode', type: 'select', options: ['stake', 'unstake'] },
       { key: 'amount', label: 'Amount (SOL, to stake)', type: 'number', placeholder: 'e.g. 0.05' },
-      { key: 'validator', label: 'Validator vote account (stake; optional)', placeholder: 'Auto-picks an active validator if blank' },
+      {
+        key: 'validator',
+        label: 'Validator vote account (stake; optional)',
+        placeholder: 'Auto-picks an active validator if blank',
+      },
       { key: 'stakeAccount', label: 'Stake account (to unstake)', placeholder: 'Address returned when you staked' },
     ],
   },
@@ -464,7 +510,10 @@ export const ACTION_CATALOG: CatalogEntry<ActionType>[] = [
     label: 'Update oracle data',
     description: 'Pushes new data to an on-chain oracle when triggered.',
     implementation: 'smart_contract',
-    fields: [{ key: 'oracle', label: 'Oracle account', required: true }, { key: 'value', label: 'Value', required: true }],
+    fields: [
+      { key: 'oracle', label: 'Oracle account', required: true },
+      { key: 'value', label: 'Value', required: true },
+    ],
   },
   {
     type: 'trigger_cross_chain_tx',
@@ -497,13 +546,15 @@ export const ACTION_BY_TYPE: Record<ActionType, CatalogEntry<ActionType>> = Obje
   ACTION_CATALOG.map((a) => [a.type, a]),
 ) as Record<ActionType, CatalogEntry<ActionType>>;
 
-export const TRIGGER_LABELS = Object.fromEntries(
-  TRIGGER_CATALOG.map((t) => [t.type, t.label]),
-) as Record<TriggerType, string>;
+export const TRIGGER_LABELS = Object.fromEntries(TRIGGER_CATALOG.map((t) => [t.type, t.label])) as Record<
+  TriggerType,
+  string
+>;
 
-export const ACTION_LABELS = Object.fromEntries(
-  ACTION_CATALOG.map((a) => [a.type, a.label]),
-) as Record<ActionType, string>;
+export const ACTION_LABELS = Object.fromEntries(ACTION_CATALOG.map((a) => [a.type, a.label])) as Record<
+  ActionType,
+  string
+>;
 
 /**
  * The data keys each trigger emits into triggerData (besides the always-present
@@ -541,11 +592,9 @@ export const TRIGGER_PLACEHOLDERS: Record<TriggerType, string[]> = {
 /** All {placeholders} available for a trigger, including the universal `triggerType`. */
 export const placeholdersFor = (type: TriggerType): string[] => ['triggerType', ...(TRIGGER_PLACEHOLDERS[type] ?? [])];
 
-export const isTriggerType = (v: unknown): v is TriggerType =>
-  typeof v === 'string' && v in TRIGGER_BY_TYPE;
+export const isTriggerType = (v: unknown): v is TriggerType => typeof v === 'string' && v in TRIGGER_BY_TYPE;
 
-export const isActionType = (v: unknown): v is ActionType =>
-  typeof v === 'string' && v in ACTION_BY_TYPE;
+export const isActionType = (v: unknown): v is ActionType => typeof v === 'string' && v in ACTION_BY_TYPE;
 
 // ---------------------------------------------------------------------------
 // Workflow templates — prebuilt recipes to lower the onboarding cliff.
@@ -627,7 +676,10 @@ export const WORKFLOW_TEMPLATES: WorkflowTemplate[] = [
   },
 ];
 
-export const TEMPLATE_BY_ID = Object.fromEntries(WORKFLOW_TEMPLATES.map((t) => [t.id, t])) as Record<string, WorkflowTemplate>;
+export const TEMPLATE_BY_ID = Object.fromEntries(WORKFLOW_TEMPLATES.map((t) => [t.id, t])) as Record<
+  string,
+  WorkflowTemplate
+>;
 
 // ---------------------------------------------------------------------------
 // Action planning (dry-run) — shared by the API simulate endpoint and worker.

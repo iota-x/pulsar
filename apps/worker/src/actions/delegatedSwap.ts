@@ -105,7 +105,14 @@ export async function executeDelegatedSwap(config: ActionConfig): Promise<string
     createAssociatedTokenAccountIdempotentInstruction(signer.publicKey, treasuryInputAta, TREASURY, inputMint),
     createAssociatedTokenAccountIdempotentInstruction(signer.publicKey, recipientOutputAta, recipient, outputMint),
   ];
-  const pullIx = buildDelegatedTransferIx(owner, inputMint, userInputAta, operatorInputAta, treasuryInputAta, amountRaw);
+  const pullIx = buildDelegatedTransferIx(
+    owner,
+    inputMint,
+    userInputAta,
+    operatorInputAta,
+    treasuryInputAta,
+    amountRaw,
+  );
 
   // 3. Compose + send one atomic versioned transaction.
   const instructions = [...computeBudget, ...ensure, pullIx, ...setup, swapIx, ...cleanup];
@@ -115,7 +122,11 @@ export async function executeDelegatedSwap(config: ActionConfig): Promise<string
   ).filter((x): x is AddressLookupTableAccount => !!x);
 
   const { blockhash } = await connection.getLatestBlockhash();
-  const msg = new TransactionMessage({ payerKey: signer.publicKey, recentBlockhash: blockhash, instructions }).compileToV0Message(alts);
+  const msg = new TransactionMessage({
+    payerKey: signer.publicKey,
+    recentBlockhash: blockhash,
+    instructions,
+  }).compileToV0Message(alts);
   const vtx = new VersionedTransaction(msg);
   vtx.sign([signer]);
   const sig = await connection.sendRawTransaction(vtx.serialize());

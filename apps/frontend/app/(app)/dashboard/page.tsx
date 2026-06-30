@@ -7,17 +7,7 @@ import type { DashboardStats } from '@/lib/types';
 import { StatusBadge } from '@/components/StatusBadge';
 import { OnboardingChecklist } from '@/components/OnboardingChecklist';
 
-function StatCard({
-  label,
-  value,
-  accent,
-  bar,
-}: {
-  label: string;
-  value: number;
-  accent?: string;
-  bar: string;
-}) {
+function StatCard({ label, value, accent, bar }: { label: string; value: number; accent?: string; bar: string }) {
   return (
     <div className="card card-hover relative overflow-hidden">
       <div className={`absolute inset-x-0 top-0 h-px ${bar}`} />
@@ -32,7 +22,9 @@ export default function DashboardPage() {
   const [error, setError] = useState('');
 
   useEffect(() => {
-    api<DashboardStats>('/dashboard').then(setStats).catch((e) => setError(e.message));
+    api<DashboardStats>('/dashboard')
+      .then(setStats)
+      .catch((e) => setError(e.message));
   }, []);
 
   if (error) return <p className="text-rose-400">{error}</p>;
@@ -53,9 +45,23 @@ export default function DashboardPage() {
       <OnboardingChecklist stats={stats} />
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        <StatCard label="Total workflows" value={stats.totalWorkflows} bar="bg-gradient-to-r from-violet-500/0 via-violet-500/60 to-violet-500/0" />
-        <StatCard label="Active workflows" value={stats.activeWorkflows} accent="text-emerald-300" bar="bg-gradient-to-r from-emerald-500/0 via-emerald-500/60 to-emerald-500/0" />
-        <StatCard label="Failed executions" value={stats.failedExecutions} accent="text-rose-300" bar="bg-gradient-to-r from-rose-500/0 via-rose-500/60 to-rose-500/0" />
+        <StatCard
+          label="Total workflows"
+          value={stats.totalWorkflows}
+          bar="bg-gradient-to-r from-violet-500/0 via-violet-500/60 to-violet-500/0"
+        />
+        <StatCard
+          label="Active workflows"
+          value={stats.activeWorkflows}
+          accent="text-emerald-300"
+          bar="bg-gradient-to-r from-emerald-500/0 via-emerald-500/60 to-emerald-500/0"
+        />
+        <StatCard
+          label="Failed executions"
+          value={stats.failedExecutions}
+          accent="text-rose-300"
+          bar="bg-gradient-to-r from-rose-500/0 via-rose-500/60 to-rose-500/0"
+        />
       </div>
 
       <div>

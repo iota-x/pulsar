@@ -1,5 +1,11 @@
 import { Queue, type ConnectionOptions } from 'bullmq';
-import { EXECUTION_QUEUE, type ExecutionJob, dedupeKeyFor, bullmqJobId, redisConnectionOptions } from '@web3-zapier/shared';
+import {
+  EXECUTION_QUEUE,
+  type ExecutionJob,
+  dedupeKeyFor,
+  bullmqJobId,
+  redisConnectionOptions,
+} from '@web3-zapier/shared';
 
 const queue = new Queue<ExecutionJob>(EXECUTION_QUEUE, {
   connection: redisConnectionOptions() as ConnectionOptions,

@@ -6,11 +6,7 @@ import {
   TransactionInstruction,
   sendAndConfirmTransaction,
 } from '@solana/web3.js';
-import {
-  TOKEN_PROGRAM_ID,
-  getAssociatedTokenAddress,
-  getOrCreateAssociatedTokenAccount,
-} from '@solana/spl-token';
+import { TOKEN_PROGRAM_ID, getAssociatedTokenAddress, getOrCreateAssociatedTokenAccount } from '@solana/spl-token';
 import { connection, getSigner, explorerUrl } from './solana';
 
 /** Deployed web3_zapier program (devnet). Override via WEB3_ZAPIER_PROGRAM_ID. */
@@ -23,9 +19,7 @@ export const PROGRAM_ID = new PublicKey(
  * execute_delegated_transfer. Must match the on-chain TREASURY constant — the
  * program rejects any other fee destination. Defaults to the operator wallet.
  */
-export const TREASURY = new PublicKey(
-  process.env.TREASURY_PUBKEY ?? 'FgCiArPJfe9YCfW8Gioo87uoG7M9zXiPg8JvJHK3uTtJ',
-);
+export const TREASURY = new PublicKey(process.env.TREASURY_PUBKEY ?? 'FgCiArPJfe9YCfW8Gioo87uoG7M9zXiPg8JvJHK3uTtJ');
 
 /** Platform fee in basis points — MUST match the on-chain FEE_BPS constant. */
 export const FEE_BPS = 50;

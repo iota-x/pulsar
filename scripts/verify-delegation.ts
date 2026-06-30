@@ -16,14 +16,7 @@
  */
 import fs from 'fs';
 import path from 'path';
-import {
-  Connection,
-  Keypair,
-  PublicKey,
-  SystemProgram,
-  Transaction,
-  sendAndConfirmTransaction,
-} from '@solana/web3.js';
+import { Connection, Keypair, PublicKey, SystemProgram, Transaction, sendAndConfirmTransaction } from '@solana/web3.js';
 
 /**
  * Read a single delegation PDA's cap/usage via getAccountInfo. (fetchDelegations
@@ -116,7 +109,9 @@ const step = (m: string) => console.log(`\n▶ ${m}`);
   const delPda = delegationPda(user.publicKey, mint);
   const d0 = await readDelegation(conn, delPda);
   if (!d0) throw new Error('delegation account not found after create');
-  ok(`delegation live — max=${Number(d0.maxAmount) / 1e6}, used=${Number(d0.usedAmount) / 1e6}, recipients=${d0.recipients}`);
+  ok(
+    `delegation live — max=${Number(d0.maxAmount) / 1e6}, used=${Number(d0.usedAmount) / 1e6}, recipients=${d0.recipients}`,
+  );
 
   // 4. OPERATOR moves 10 of the user's token to the recipient — the executor path.
   //    Signature: callDelegatedTransfer(owner, mint, recipient, amountRaw).

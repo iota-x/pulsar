@@ -53,7 +53,10 @@ export default function LoginPage() {
           </p>
         </div>
 
-        <form onSubmit={submit} className="ring-grad rounded-2xl border border-white/10 bg-white/[0.04] p-6 backdrop-blur-xl">
+        <form
+          onSubmit={submit}
+          className="ring-grad rounded-2xl border border-white/10 bg-white/[0.04] p-6 backdrop-blur-xl"
+        >
           <div className="space-y-4">
             <div>
               <label className="label">Email</label>

@@ -6,7 +6,13 @@ import { Connection } from '@solana/web3.js';
 import { useWallet } from '@/components/WalletContext';
 import { api } from '@/lib/api';
 import type { User } from '@/lib/types';
-import { buildDelegationTx, buildWrapAndDelegateTx, buildRevokeTx, fetchDelegations, type DelegationInfo } from '@/lib/delegation';
+import {
+  buildDelegationTx,
+  buildWrapAndDelegateTx,
+  buildRevokeTx,
+  fetchDelegations,
+  type DelegationInfo,
+} from '@/lib/delegation';
 
 const PERIOD_OPTIONS: { label: string; seconds: number }[] = [
   { label: 'Total (lifetime cap)', seconds: 0 },
@@ -16,7 +22,9 @@ const PERIOD_OPTIONS: { label: string; seconds: number }[] = [
 ];
 
 const periodLabel = (seconds: number): string =>
-  PERIOD_OPTIONS.find((p) => p.seconds === seconds)?.label.replace(/^Per /, '').toLowerCase() ?? `${seconds}s`;
+  PERIOD_OPTIONS.find((p) => p.seconds === seconds)
+    ?.label.replace(/^Per /, '')
+    .toLowerCase() ?? `${seconds}s`;
 
 /** Format a raw token amount (base units) into human UI units for display. */
 const fmtAmount = (raw: bigint, decimals: number): string => {
@@ -29,7 +37,8 @@ export default function WalletPage() {
     () => new Connection(process.env.NEXT_PUBLIC_SOLANA_RPC ?? 'https://api.devnet.solana.com', 'confirmed'),
     [],
   );
-  const { publicKey, connected, connecting, installed, connect, disconnect, signMessage, sendTransaction } = useWallet();
+  const { publicKey, connected, connecting, installed, connect, disconnect, signMessage, sendTransaction } =
+    useWallet();
   const [me, setMe] = useState<User | null>(null);
   const [busy, setBusy] = useState('');
   const [msg, setMsg] = useState<{ kind: 'ok' | 'err'; text: string } | null>(null);
@@ -44,7 +53,9 @@ export default function WalletPage() {
   const [delegations, setDelegations] = useState<DelegationInfo[]>([]);
 
   useEffect(() => {
-    api<User>('/auth/me').then(setMe).catch(() => {});
+    api<User>('/auth/me')
+      .then(setMe)
+      .catch(() => {});
   }, []);
 
   const connectedAddr = publicKey?.toBase58();
@@ -108,10 +119,11 @@ export default function WalletPage() {
     setBusy('authorize');
     setMsg(null);
     try {
-      const expiryUnix = expiryDays
-        ? Math.floor(Date.now() / 1000) + Number(expiryDays) * 86400
-        : 0;
-      const recipientList = recipients.split(',').map((r) => r.trim()).filter(Boolean);
+      const expiryUnix = expiryDays ? Math.floor(Date.now() / 1000) + Number(expiryDays) * 86400 : 0;
+      const recipientList = recipients
+        .split(',')
+        .map((r) => r.trim())
+        .filter(Boolean);
       const periodSeconds = Number(period) || 0;
       const tx = solMode
         ? await buildWrapAndDelegateTx(connection, publicKey, maxUi, expiryUnix, recipientList, periodSeconds)
@@ -136,8 +148,8 @@ export default function WalletPage() {
       <div>
         <h1 className="font-display text-3xl font-bold tracking-tight text-white">Wallet & permissions</h1>
         <p className="mt-1 text-sm text-slate-400">
-          Connect your wallet and authorize Pulsar to run on-chain actions on your behalf —
-          non-custodially. We never hold your keys; you grant a capped, revocable permission.
+          Connect your wallet and authorize Pulsar to run on-chain actions on your behalf — non-custodially. We never
+          hold your keys; you grant a capped, revocable permission.
         </p>
       </div>
 
@@ -167,7 +179,11 @@ export default function WalletPage() {
               Disconnect
             </button>
           ) : (
-            <button onClick={() => connect().catch((e) => setMsg({ kind: 'err', text: e.message }))} disabled={connecting} className="btn-primary py-2">
+            <button
+              onClick={() => connect().catch((e) => setMsg({ kind: 'err', text: e.message }))}
+              disabled={connecting}
+              className="btn-primary py-2"
+            >
               {connecting ? 'Connecting…' : installed ? 'Connect wallet' : 'Install Phantom'}
             </button>
           )}
@@ -177,7 +193,9 @@ export default function WalletPage() {
           <div className="flex items-center justify-between rounded-xl border border-white/10 bg-black/20 px-4 py-3">
             <div className="text-sm">
               <span className="text-slate-400">Connected: </span>
-              <span className="font-mono text-slate-200">{connectedAddr?.slice(0, 6)}…{connectedAddr?.slice(-4)}</span>
+              <span className="font-mono text-slate-200">
+                {connectedAddr?.slice(0, 6)}…{connectedAddr?.slice(-4)}
+              </span>
               {linked && <span className="ml-2 text-emerald-400">✓ linked to your account</span>}
             </div>
             {!linked && (
@@ -194,23 +212,33 @@ export default function WalletPage() {
         <div>
           <h2 className="font-display text-lg font-semibold text-white">2. Authorize automation</h2>
           <p className="mt-1 text-sm text-slate-400">
-            Grant a <span className="text-slate-200">capped, time-limited</span> permission for one token.
-            Your workflows can then move it automatically — never more than this cap.
+            Grant a <span className="text-slate-200">capped, time-limited</span> permission for one token. Your
+            workflows can then move it automatically — never more than this cap.
           </p>
           <p className="mt-2 rounded-lg border border-violet-400/20 bg-violet-500/[0.06] px-3 py-2 text-xs text-violet-200/90">
-            Pulsar charges a <span className="font-medium">0.5% fee</span> on each automated transfer, deducted on-chain —
-            the recipient receives the rest, and the fee counts toward your cap.
+            Pulsar charges a <span className="font-medium">0.5% fee</span> on each automated transfer, deducted on-chain
+            — the recipient receives the rest, and the fee counts toward your cap.
           </p>
         </div>
         <label className="flex w-fit items-center gap-2 rounded-xl border border-cyan-400/20 bg-cyan-500/[0.06] px-3 py-2 text-sm text-slate-200">
-          <input type="checkbox" className="h-4 w-4 accent-cyan-500" checked={solMode} onChange={(e) => setSolMode(e.target.checked)} />
+          <input
+            type="checkbox"
+            className="h-4 w-4 accent-cyan-500"
+            checked={solMode}
+            onChange={(e) => setSolMode(e.target.checked)}
+          />
           Delegate <span className="font-medium text-cyan-300">SOL</span> (auto-wraps to wSOL)
         </label>
         <div className="grid gap-3 sm:grid-cols-3">
           {!solMode && (
             <div className="sm:col-span-3">
               <label className="label">Token mint address</label>
-              <input className="input" placeholder="e.g. EPjFWdd5…" value={mint} onChange={(e) => setMint(e.target.value)} />
+              <input
+                className="input"
+                placeholder="e.g. EPjFWdd5…"
+                value={mint}
+                onChange={(e) => setMint(e.target.value)}
+              />
             </div>
           )}
           <div>
@@ -229,11 +257,22 @@ export default function WalletPage() {
           </div>
           <div>
             <label className="label">Expires in (days, optional)</label>
-            <input className="input" type="number" placeholder="never" value={expiryDays} onChange={(e) => setExpiryDays(e.target.value)} />
+            <input
+              className="input"
+              type="number"
+              placeholder="never"
+              value={expiryDays}
+              onChange={(e) => setExpiryDays(e.target.value)}
+            />
           </div>
           <div className="sm:col-span-3">
             <label className="label">Restrict to recipients (optional, comma-separated)</label>
-            <input className="input" placeholder="leave blank to allow any recipient — up to 5 addresses" value={recipients} onChange={(e) => setRecipients(e.target.value)} />
+            <input
+              className="input"
+              placeholder="leave blank to allow any recipient — up to 5 addresses"
+              value={recipients}
+              onChange={(e) => setRecipients(e.target.value)}
+            />
             <p className="mt-1 text-xs text-slate-500">
               For extra safety: even if Pulsar were compromised, your tokens could only go to these addresses.
             </p>
@@ -255,16 +294,26 @@ export default function WalletPage() {
                 <div key={d.pubkey} className="rounded-xl border border-white/10 bg-black/20 p-4">
                   <div className="flex items-start justify-between gap-4">
                     <div className="min-w-0">
-                      <p className="font-mono text-sm text-slate-200">{d.mint.slice(0, 10)}…{d.mint.slice(-6)}</p>
+                      <p className="font-mono text-sm text-slate-200">
+                        {d.mint.slice(0, 10)}…{d.mint.slice(-6)}
+                      </p>
                       <p className="mt-1 text-xs text-slate-400">
                         {d.periodSeconds > 0
                           ? `${fmtAmount(d.windowAmount, d.decimals)} / ${fmtAmount(d.maxAmount, d.decimals)} this ${periodLabel(d.periodSeconds)}`
                           : `used ${fmtAmount(d.usedAmount, d.decimals)} / cap ${fmtAmount(d.maxAmount, d.decimals)}`}
                         {' · '}
-                        {d.expiry === 0 ? 'no expiry' : expired ? <span className="text-rose-400">expired</span> : `expires ${new Date(d.expiry * 1000).toLocaleDateString()}`}
+                        {d.expiry === 0 ? (
+                          'no expiry'
+                        ) : expired ? (
+                          <span className="text-rose-400">expired</span>
+                        ) : (
+                          `expires ${new Date(d.expiry * 1000).toLocaleDateString()}`
+                        )}
                       </p>
                       {d.periodSeconds > 0 && (
-                        <p className="mt-0.5 text-xs text-cyan-400">rolling cap · resets every {periodLabel(d.periodSeconds)}</p>
+                        <p className="mt-0.5 text-xs text-cyan-400">
+                          rolling cap · resets every {periodLabel(d.periodSeconds)}
+                        </p>
                       )}
                       {d.recipients.length > 0 && (
                         <p className="mt-1 text-xs text-slate-500">restricted to {d.recipients.length} recipient(s)</p>
@@ -286,9 +335,9 @@ export default function WalletPage() {
       )}
 
       <p className="text-xs text-slate-500">
-        How it works: you sign one transaction that approves Pulsar&apos;s on-chain program as a
-        bounded delegate. When a trigger fires, the program moves your tokens within the cap — without
-        any further approval. Revoke anytime from your wallet.
+        How it works: you sign one transaction that approves Pulsar&apos;s on-chain program as a bounded delegate. When
+        a trigger fires, the program moves your tokens within the cap — without any further approval. Revoke anytime
+        from your wallet.
       </p>
     </div>
   );

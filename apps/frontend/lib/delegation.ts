@@ -1,11 +1,5 @@
 import { Buffer } from 'buffer';
-import {
-  Connection,
-  PublicKey,
-  Transaction,
-  TransactionInstruction,
-  SystemProgram,
-} from '@solana/web3.js';
+import { Connection, PublicKey, Transaction, TransactionInstruction, SystemProgram } from '@solana/web3.js';
 import {
   getAssociatedTokenAddress,
   getAssociatedTokenAddressSync,
@@ -45,10 +39,7 @@ export const authorityPda = (): PublicKey =>
   PublicKey.findProgramAddressSync([Buffer.from('authority')], PROGRAM_ID)[0];
 
 export const delegationPda = (owner: PublicKey, mint: PublicKey): PublicKey =>
-  PublicKey.findProgramAddressSync(
-    [Buffer.from('delegation'), owner.toBuffer(), mint.toBuffer()],
-    PROGRAM_ID,
-  )[0];
+  PublicKey.findProgramAddressSync([Buffer.from('delegation'), owner.toBuffer(), mint.toBuffer()], PROGRAM_ID)[0];
 
 /**
  * The `create_delegation` instruction (records cap/expiry/period/operator/
@@ -182,8 +173,20 @@ export async function fetchDelegations(connection: Connection, owner: PublicKey)
     const decimals =
       mint === WSOL_MINT.toBase58()
         ? 9
-        : await getMint(connection, new PublicKey(mint)).then((m) => m.decimals).catch(() => 0);
-    out.push({ pubkey: pubkey.toBase58(), mint, maxAmount, usedAmount, expiry, periodSeconds, windowAmount, recipients, decimals });
+        : await getMint(connection, new PublicKey(mint))
+            .then((m) => m.decimals)
+            .catch(() => 0);
+    out.push({
+      pubkey: pubkey.toBase58(),
+      mint,
+      maxAmount,
+      usedAmount,
+      expiry,
+      periodSeconds,
+      windowAmount,
+      recipients,
+      decimals,
+    });
   }
   return out;
 }

@@ -8,14 +8,35 @@ import { Logo } from '@/components/Logo';
 import { APP_NAME } from '@/lib/brand';
 
 const concepts = [
-  { t: 'Wallet', d: 'Your account on Solana, identified by a public address (a long string like 7xKq…). It holds SOL and tokens.' },
-  { t: 'SOL & lamports', d: "Solana's native coin. Fees are tiny — a transaction costs a fraction of a cent. 1 SOL = 1,000,000,000 lamports." },
-  { t: 'SPL token', d: 'Any token on Solana that isn’t SOL — like USDC or a project token. Each has a unique “mint” address.' },
-  { t: 'NFT', d: 'A one-of-a-kind token (supply 1, 0 decimals). Art, collectibles, tickets — all live on-chain as NFTs.' },
-  { t: 'Devnet vs Mainnet', d: 'Devnet is a free practice network with fake SOL — perfect for learning. Mainnet is the real one with real value.' },
+  {
+    t: 'Wallet',
+    d: 'Your account on Solana, identified by a public address (a long string like 7xKq…). It holds SOL and tokens.',
+  },
+  {
+    t: 'SOL & lamports',
+    d: "Solana's native coin. Fees are tiny — a transaction costs a fraction of a cent. 1 SOL = 1,000,000,000 lamports.",
+  },
+  {
+    t: 'SPL token',
+    d: 'Any token on Solana that isn’t SOL — like USDC or a project token. Each has a unique “mint” address.',
+  },
+  {
+    t: 'NFT',
+    d: 'A one-of-a-kind token (supply 1, 0 decimals). Art, collectibles, tickets — all live on-chain as NFTs.',
+  },
+  {
+    t: 'Devnet vs Mainnet',
+    d: 'Devnet is a free practice network with fake SOL — perfect for learning. Mainnet is the real one with real value.',
+  },
   { t: 'Trigger', d: 'The “when” of a workflow — an on-chain event Pulsar watches for, like “a wallet receives SOL.”' },
-  { t: 'Action', d: 'The “then” — what runs when the trigger fires: send tokens, notify Discord, swap, call a contract…' },
-  { t: 'Signer', d: 'A keypair Pulsar uses to sign on-chain actions. Off-chain actions (webhooks, email) need no signer at all.' },
+  {
+    t: 'Action',
+    d: 'The “then” — what runs when the trigger fires: send tokens, notify Discord, swap, call a contract…',
+  },
+  {
+    t: 'Signer',
+    d: 'A keypair Pulsar uses to sign on-chain actions. Off-chain actions (webhooks, email) need no signer at all.',
+  },
 ];
 
 const recipes = [
@@ -26,12 +47,30 @@ const recipes = [
 ];
 
 const steps = [
-  { t: 'Create an account', d: 'Sign up with an email and password — that’s it. No wallet connection needed to start.' },
-  { t: 'Open the builder', d: 'Hit “New workflow”. You’ll pick one trigger and one or more actions, each with simple config fields.' },
-  { t: 'Choose your trigger', d: 'Start with “Wallet receives SOL”. Paste any Solana address to watch and an optional minimum amount.' },
-  { t: 'Add an action', d: 'Pick “Store log” or “Send a notification” to keep it simple — these need no signer. Save the workflow.' },
-  { t: 'Test it instantly', d: 'Open the workflow and hit “Run now” to fire it manually, then check the execution history.' },
-  { t: 'Go live', d: 'Activate it. Pulsar now watches the chain and runs your workflow automatically whenever the event happens.' },
+  {
+    t: 'Create an account',
+    d: 'Sign up with an email and password — that’s it. No wallet connection needed to start.',
+  },
+  {
+    t: 'Open the builder',
+    d: 'Hit “New workflow”. You’ll pick one trigger and one or more actions, each with simple config fields.',
+  },
+  {
+    t: 'Choose your trigger',
+    d: 'Start with “Wallet receives SOL”. Paste any Solana address to watch and an optional minimum amount.',
+  },
+  {
+    t: 'Add an action',
+    d: 'Pick “Store log” or “Send a notification” to keep it simple — these need no signer. Save the workflow.',
+  },
+  {
+    t: 'Test it instantly',
+    d: 'Open the workflow and hit “Run now” to fire it manually, then check the execution history.',
+  },
+  {
+    t: 'Go live',
+    d: 'Activate it. Pulsar now watches the chain and runs your workflow automatically whenever the event happens.',
+  },
 ];
 
 export default function LearnPage() {
@@ -47,8 +86,8 @@ export default function LearnPage() {
             New to web3? <span className="gradient-text">You’re in the right place.</span>
           </h1>
           <p className="mx-auto mt-6 max-w-2xl text-lg text-slate-400">
-            {APP_NAME} lets you automate the Solana blockchain without writing a single line of code.
-            This 5-minute guide explains the basics and walks you through your first workflow.
+            {APP_NAME} lets you automate the Solana blockchain without writing a single line of code. This 5-minute
+            guide explains the basics and walks you through your first workflow.
           </p>
         </Reveal>
       </section>
@@ -59,15 +98,17 @@ export default function LearnPage() {
           <div className="card">
             <h2 className="font-display text-2xl font-semibold text-white">What is on-chain automation?</h2>
             <p className="mt-3 leading-relaxed text-slate-400">
-              The Solana blockchain is a giant public ledger where things happen every second — wallets
-              receive money, NFTs get minted, tokens get swapped. Normally you’d have to watch for those
-              events yourself and react manually.
+              The Solana blockchain is a giant public ledger where things happen every second — wallets receive money,
+              NFTs get minted, tokens get swapped. Normally you’d have to watch for those events yourself and react
+              manually.
             </p>
             <p className="mt-3 leading-relaxed text-slate-400">
               {APP_NAME} does the watching for you. You describe a rule in plain terms —{' '}
-              <span className="text-slate-200">“when <span className="text-violet-300">this</span> happens, do{' '}
-              <span className="text-cyan-300">that</span>”</span> — and it runs automatically, 24/7. Think of
-              it like email filters or IFTTT, but for the blockchain.
+              <span className="text-slate-200">
+                “when <span className="text-violet-300">this</span> happens, do{' '}
+                <span className="text-cyan-300">that</span>”
+              </span>{' '}
+              — and it runs automatically, 24/7. Think of it like email filters or IFTTT, but for the blockchain.
             </p>
           </div>
         </Reveal>
@@ -125,9 +166,7 @@ export default function LearnPage() {
       {/* Recipes */}
       <section className="mx-auto max-w-5xl px-4 py-12">
         <Reveal>
-          <h2 className="font-display text-center text-3xl font-bold tracking-tight text-white">
-            Ideas to steal
-          </h2>
+          <h2 className="font-display text-center text-3xl font-bold tracking-tight text-white">Ideas to steal</h2>
           <p className="mx-auto mt-3 max-w-xl text-center text-slate-400">
             Popular recipes you can recreate in a couple of clicks.
           </p>

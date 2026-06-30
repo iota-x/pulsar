@@ -79,16 +79,36 @@ export class SolanaWatcher {
 
   /** Reconcile all live subscriptions with the desired target sets. */
   async sync(t: SyncTargets): Promise<void> {
-    await this.reconcile(this.accountSubs, t.wallets, (w) => this.subscribeWallet(w), (w) => this.unsubscribeWallet(w));
-    await this.reconcile(this.programSubs, t.programs, (p) => this.subscribeProgram(p), (p) => this.unsubscribeProgram(p));
-    await this.reconcile(this.dataSubs, t.accounts, (a) => this.subscribeAccount(a), (a) => this.unsubscribeAccount(a));
+    await this.reconcile(
+      this.accountSubs,
+      t.wallets,
+      (w) => this.subscribeWallet(w),
+      (w) => this.unsubscribeWallet(w),
+    );
+    await this.reconcile(
+      this.programSubs,
+      t.programs,
+      (p) => this.subscribeProgram(p),
+      (p) => this.unsubscribeProgram(p),
+    );
+    await this.reconcile(
+      this.dataSubs,
+      t.accounts,
+      (a) => this.subscribeAccount(a),
+      (a) => this.unsubscribeAccount(a),
+    );
     await this.reconcile(
       this.fixedSubs,
       new Set(t.fixedPrograms.keys()),
       (p) => this.subscribeFixedProgram(p, t.fixedPrograms.get(p)!),
       (p) => this.unsubscribeFixedProgram(p),
     );
-    await this.reconcile(this.mintSubs, t.mints, (m) => this.subscribeMint(m), (m) => this.unsubscribeMint(m));
+    await this.reconcile(
+      this.mintSubs,
+      t.mints,
+      (m) => this.subscribeMint(m),
+      (m) => this.unsubscribeMint(m),
+    );
 
     if (t.slots && this.slotSub === null) {
       this.slotSub = this.connection.onSlotChange(({ slot }) =>
@@ -136,10 +156,16 @@ export class SolanaWatcher {
       this.lastLamports.set(wallet, info.lamports);
 
       if (delta > 0) {
-        this.onEvent({ target: wallet, data: { triggerType: 'wallet_received_sol', kind: 'wallet', wallet, amount: delta / 1e9, balanceSol } });
+        this.onEvent({
+          target: wallet,
+          data: { triggerType: 'wallet_received_sol', kind: 'wallet', wallet, amount: delta / 1e9, balanceSol },
+        });
         void this.lookupFunder(wallet, delta / 1e9);
       }
-      this.onEvent({ target: wallet, data: { triggerType: 'wallet_balance_below_threshold', kind: 'wallet', wallet, balanceSol } });
+      this.onEvent({
+        target: wallet,
+        data: { triggerType: 'wallet_balance_below_threshold', kind: 'wallet', wallet, balanceSol },
+      });
     });
 
     const logSub = this.connection.onLogs(pubkey, (logs) => {
@@ -171,7 +197,11 @@ export class SolanaWatcher {
    * re-emits them oldest-first; the worker's exactly-once claim drops any that
    * were already processed, so this is safe and idempotent.
    */
-  private async backfill(target: string, pubkey: PublicKey, emit: (sig: string, lines: string[]) => void): Promise<void> {
+  private async backfill(
+    target: string,
+    pubkey: PublicKey,
+    emit: (sig: string, lines: string[]) => void,
+  ): Promise<void> {
     try {
       const cursor = await getCursor(target);
       const sigs = await this.connection.getSignaturesForAddress(pubkey, { until: cursor ?? undefined, limit: 50 });
@@ -202,7 +232,10 @@ export class SolanaWatcher {
       const keys = tx?.transaction.message.accountKeys ?? [];
       const signer = keys.find((k) => k.signer)?.pubkey.toBase58();
       if (signer && signer !== wallet) {
-        this.onEvent({ target: wallet, data: { triggerType: 'wallet_funded_by_address', kind: 'wallet', wallet, amount, fromAddress: signer } });
+        this.onEvent({
+          target: wallet,
+          data: { triggerType: 'wallet_funded_by_address', kind: 'wallet', wallet, amount, fromAddress: signer },
+        });
       }
     } catch {
       /* best-effort */
@@ -228,7 +261,11 @@ export class SolanaWatcher {
     this.tokenSubs.set(wallet, tokenSub);
   }
 
-  private async handleTokenChange(wallet: string, accountId: PublicKey, accountInfo: Parameters<typeof unpackAccount>[1]): Promise<void> {
+  private async handleTokenChange(
+    wallet: string,
+    accountId: PublicKey,
+    accountInfo: Parameters<typeof unpackAccount>[1],
+  ): Promise<void> {
     let parsed;
     try {
       parsed = unpackAccount(accountId, accountInfo, TOKEN_PROGRAM_ID);
@@ -244,8 +281,14 @@ export class SolanaWatcher {
     const mint = parsed.mint.toBase58();
     const decimals = await this.getDecimals(parsed.mint);
     const uiAmount = Number(delta) / 10 ** decimals;
-    this.onEvent({ target: wallet, data: { triggerType: 'wallet_received_token', kind: 'wallet', wallet, mint, amount: uiAmount } });
-    this.onEvent({ target: wallet, data: { triggerType: 'airdrop_detected', kind: 'wallet', wallet, mint, amount: uiAmount } });
+    this.onEvent({
+      target: wallet,
+      data: { triggerType: 'wallet_received_token', kind: 'wallet', wallet, mint, amount: uiAmount },
+    });
+    this.onEvent({
+      target: wallet,
+      data: { triggerType: 'airdrop_detected', kind: 'wallet', wallet, mint, amount: uiAmount },
+    });
     if (decimals === 0) {
       this.onEvent({ target: wallet, data: { triggerType: 'wallet_received_nft', kind: 'wallet', wallet, mint } });
     }
@@ -362,7 +405,13 @@ export class SolanaWatcher {
       void this.fetchAccounts(logs.signature).then((accounts) =>
         this.onEvent({
           target: programId,
-          data: { triggerType: triggerType as TriggerData['triggerType'], kind: 'fixed', signature: logs.signature, logs: logs.logs, accounts },
+          data: {
+            triggerType: triggerType as TriggerData['triggerType'],
+            kind: 'fixed',
+            signature: logs.signature,
+            logs: logs.logs,
+            accounts,
+          },
         }),
       );
     });
@@ -444,7 +493,13 @@ export class SolanaWatcher {
       // release (value ↓); liquidity_pool_balance_changed fires on either.
       this.onEvent({
         target: account,
-        data: { triggerType: 'liquidity_pool_balance_changed', kind: 'account', account, lamports: info.lamports, valueDelta },
+        data: {
+          triggerType: 'liquidity_pool_balance_changed',
+          kind: 'account',
+          account,
+          lamports: info.lamports,
+          valueDelta,
+        },
       });
     });
     this.dataSubs.set(account, sub);

@@ -88,7 +88,9 @@ describe('executeWorkflow — custody policy (non-custodial by default)', () => 
   const delegatedWorkflow = (overrides: Record<string, unknown> = {}, walletAddress: string | null = 'UserWa11et') => ({
     ...baseWorkflow,
     user: { walletAddress },
-    actions: [{ id: 'a1', type: 'send_tokens', config: { to: 'Dest', mint: 'Mint', amount: 1, ...overrides }, order: 0 }],
+    actions: [
+      { id: 'a1', type: 'send_tokens', config: { to: 'Dest', mint: 'Mint', amount: 1, ...overrides }, order: 0 },
+    ],
   });
 
   beforeEach(() => prismaMock.log.create.mockResolvedValue({ id: 'log_d' }));
@@ -97,7 +99,10 @@ describe('executeWorkflow — custody policy (non-custodial by default)', () => 
     prismaMock.workflow.findUnique.mockResolvedValue(delegatedWorkflow());
     handlerMock.mockResolvedValue('sent');
 
-    await executeWorkflow({ workflowId: 'wf_1', triggerData: { triggerType: 'wallet_received_token', signature: 's' } });
+    await executeWorkflow({
+      workflowId: 'wf_1',
+      triggerData: { triggerType: 'wallet_received_token', signature: 's' },
+    });
 
     expect(handlerMock).toHaveBeenCalledWith(expect.objectContaining({ owner: 'UserWa11et' }), expect.anything());
   });
@@ -105,7 +110,10 @@ describe('executeWorkflow — custody policy (non-custodial by default)', () => 
   it('fails a delegated action when no wallet is linked (never silently spends operator funds)', async () => {
     prismaMock.workflow.findUnique.mockResolvedValue(delegatedWorkflow({}, null));
 
-    await executeWorkflow({ workflowId: 'wf_1', triggerData: { triggerType: 'wallet_received_token', signature: 's' } });
+    await executeWorkflow({
+      workflowId: 'wf_1',
+      triggerData: { triggerType: 'wallet_received_token', signature: 's' },
+    });
 
     expect(handlerMock).not.toHaveBeenCalled();
     expect(prismaMock.log.update).toHaveBeenCalledWith(
@@ -117,8 +125,14 @@ describe('executeWorkflow — custody policy (non-custodial by default)', () => 
     prismaMock.workflow.findUnique.mockResolvedValue(delegatedWorkflow({ useDelegation: 'false' }));
     handlerMock.mockResolvedValue('sent');
 
-    await executeWorkflow({ workflowId: 'wf_1', triggerData: { triggerType: 'wallet_received_token', signature: 's' } });
+    await executeWorkflow({
+      workflowId: 'wf_1',
+      triggerData: { triggerType: 'wallet_received_token', signature: 's' },
+    });
 
-    expect(handlerMock).toHaveBeenCalledWith(expect.not.objectContaining({ owner: expect.anything() }), expect.anything());
+    expect(handlerMock).toHaveBeenCalledWith(
+      expect.not.objectContaining({ owner: expect.anything() }),
+      expect.anything(),
+    );
   });
 });

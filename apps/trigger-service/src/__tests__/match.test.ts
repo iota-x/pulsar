@@ -21,7 +21,9 @@ describe('priceSatisfied — stop-loss / take-profit crossing', () => {
 });
 
 const sub = (triggerType: string, config: Record<string, unknown> = {}): Subscription => ({
-  workflowId: 'wf', triggerType, config,
+  workflowId: 'wf',
+  triggerType,
+  config,
 });
 
 describe('matchSub — program interaction (wallet filter)', () => {
@@ -48,8 +50,18 @@ describe('matchSub — program interaction (wallet filter)', () => {
 
 describe('matchSub — governance vote (instruction filter)', () => {
   it('fires only when the logs show a vote instruction', () => {
-    expect(matchSub(sub('governance_vote_triggered'), { kind: 'program_success', logs: ['Program log: Instruction: CastVote'] })).toBe(true);
-    expect(matchSub(sub('governance_vote_triggered'), { kind: 'program_success', logs: ['Program log: Instruction: CreateProposal'] })).toBe(false);
+    expect(
+      matchSub(sub('governance_vote_triggered'), {
+        kind: 'program_success',
+        logs: ['Program log: Instruction: CastVote'],
+      }),
+    ).toBe(true);
+    expect(
+      matchSub(sub('governance_vote_triggered'), {
+        kind: 'program_success',
+        logs: ['Program log: Instruction: CreateProposal'],
+      }),
+    ).toBe(false);
   });
 });
 
@@ -80,12 +92,22 @@ describe('matchSub — fixed programs (collection / mint filters)', () => {
 
   it('cross_chain_token_transfer requires a transfer/post-message instruction', () => {
     const base = { kind: 'fixed', triggerType: 'cross_chain_token_transfer', accounts: [] };
-    expect(matchSub(sub('cross_chain_token_transfer'), { ...base, logs: ['Program log: Instruction: TransferNative'] })).toBe(true);
-    expect(matchSub(sub('cross_chain_token_transfer'), { ...base, logs: ['Program log: Instruction: Initialize'] })).toBe(false);
+    expect(
+      matchSub(sub('cross_chain_token_transfer'), { ...base, logs: ['Program log: Instruction: TransferNative'] }),
+    ).toBe(true);
+    expect(
+      matchSub(sub('cross_chain_token_transfer'), { ...base, logs: ['Program log: Instruction: Initialize'] }),
+    ).toBe(false);
   });
 
   it('does not fire when the fixed event type differs from the subscription', () => {
-    expect(matchSub(sub('nft_minted', { collection: 'C' }), { kind: 'fixed', triggerType: 'new_token_listing', accounts: ['C'] })).toBe(false);
+    expect(
+      matchSub(sub('nft_minted', { collection: 'C' }), {
+        kind: 'fixed',
+        triggerType: 'new_token_listing',
+        accounts: ['C'],
+      }),
+    ).toBe(false);
   });
 });
 
@@ -108,8 +130,20 @@ describe('matchSub — account direction (staking / vesting)', () => {
 
 describe('matchSub — existing wallet/slot behavior preserved', () => {
   it('wallet_received_sol honors minAmount', () => {
-    expect(matchSub(sub('wallet_received_sol', { minAmount: 0.5 }), { kind: 'wallet', triggerType: 'wallet_received_sol', amount: 1 })).toBe(true);
-    expect(matchSub(sub('wallet_received_sol', { minAmount: 0.5 }), { kind: 'wallet', triggerType: 'wallet_received_sol', amount: 0.2 })).toBe(false);
+    expect(
+      matchSub(sub('wallet_received_sol', { minAmount: 0.5 }), {
+        kind: 'wallet',
+        triggerType: 'wallet_received_sol',
+        amount: 1,
+      }),
+    ).toBe(true);
+    expect(
+      matchSub(sub('wallet_received_sol', { minAmount: 0.5 }), {
+        kind: 'wallet',
+        triggerType: 'wallet_received_sol',
+        amount: 0.2,
+      }),
+    ).toBe(false);
   });
 
   it('new_block_mined honors everyNthSlot', () => {

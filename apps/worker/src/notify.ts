@@ -5,11 +5,7 @@ import type { ActionResult, LogStatus } from '@web3-zapier/shared';
  * if FAILURE_WEBHOOK_URL is set; always logs. Best-effort — never throws into
  * the executor (callers swallow errors).
  */
-export async function notifyFailure(
-  workflowName: string,
-  status: LogStatus,
-  results: ActionResult[],
-): Promise<void> {
+export async function notifyFailure(workflowName: string, status: LogStatus, results: ActionResult[]): Promise<void> {
   const failed = results.filter((r) => r.status === 'failed');
   const lines = failed.map((r) => `• ${r.type}: ${r.detail ?? 'failed'}`).join('\n');
   const summary = `⚠️ Workflow "${workflowName}" ${status} — ${failed.length} action(s) failed:\n${lines}`;

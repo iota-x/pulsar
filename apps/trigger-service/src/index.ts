@@ -5,14 +5,7 @@ import prisma from './prisma';
 import { enqueueExecution } from './queue';
 import { SolanaWatcher, type DetectedEvent } from './watcher';
 import { runWithLeaderElection, type LeaderHandle } from './leader';
-import {
-  matchSub,
-  priceSatisfied,
-  WALLET_TYPES,
-  PROGRAM_TYPES,
-  ACCOUNT_TYPES,
-  type Subscription,
-} from './match';
+import { matchSub, priceSatisfied, WALLET_TYPES, PROGRAM_TYPES, ACCOUNT_TYPES, type Subscription } from './match';
 import { getFiredStates, setFiredState } from './priceState';
 
 // RPC failover: a comma-separated SOLANA_RPC_URLS list (or the single
@@ -177,7 +170,9 @@ async function pollPrices(): Promise<void> {
     const detail = err instanceof Error ? err.message : String(err);
     // Escalate once a sustained outage means price triggers can't fire at all.
     if (priceFeedFailures >= PRICE_FEED_ALERT_AFTER) {
-      console.error(`[price] ⚠ FEED DOWN — ${priceFeedFailures} consecutive failures; ${priceWatches.length} price trigger(s) are blind: ${detail}`);
+      console.error(
+        `[price] ⚠ FEED DOWN — ${priceFeedFailures} consecutive failures; ${priceWatches.length} price trigger(s) are blind: ${detail}`,
+      );
     } else {
       console.error(`[price] poll error (${priceFeedFailures}): ${detail}`);
     }

@@ -71,7 +71,10 @@ export default function WorkflowsPage() {
             >
               <div>
                 <div className="flex items-center gap-2">
-                  <Link href={`/workflows/${wf.id}`} className="font-display font-semibold text-white transition hover:text-violet-300">
+                  <Link
+                    href={`/workflows/${wf.id}`}
+                    className="font-display font-semibold text-white transition hover:text-violet-300"
+                  >
                     {wf.name}
                   </Link>
                   <span className="relative inline-flex h-2 w-2">

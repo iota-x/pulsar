@@ -1,14 +1,5 @@
-import {
-  SystemProgram,
-  Transaction,
-  LAMPORTS_PER_SOL,
-  sendAndConfirmTransaction,
-} from '@solana/web3.js';
-import {
-  getMint,
-  getOrCreateAssociatedTokenAccount,
-  createTransferInstruction,
-} from '@solana/spl-token';
+import { SystemProgram, Transaction, LAMPORTS_PER_SOL, sendAndConfirmTransaction } from '@solana/web3.js';
+import { getMint, getOrCreateAssociatedTokenAccount, createTransferInstruction } from '@solana/spl-token';
 import type { ActionHandler } from './types';
 import { connection, getSigner, explorerUrl, toPublicKey } from '../solana';
 import { callDelegatedTransfer } from '../anchorProgram';

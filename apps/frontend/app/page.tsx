@@ -13,18 +13,54 @@ import { Reveal } from '@/components/Reveal';
 import { Logo } from '@/components/Logo';
 
 const steps = [
-  { n: '01', t: 'Pick a trigger', d: 'Choose an on-chain event — a wallet receiving SOL, an NFT mint, a program log, a price level.' },
-  { n: '02', t: 'Add actions', d: 'Chain real actions: send tokens, swap on Jupiter, post to Discord, call a smart contract, and more.' },
-  { n: '03', t: 'Activate & relax', d: 'Pulsar watches the chain 24/7 and runs your workflow automatically — every run logged.' },
+  {
+    n: '01',
+    t: 'Pick a trigger',
+    d: 'Choose an on-chain event — a wallet receiving SOL, an NFT mint, a program log, a price level.',
+  },
+  {
+    n: '02',
+    t: 'Add actions',
+    d: 'Chain real actions: send tokens, swap on Jupiter, post to Discord, call a smart contract, and more.',
+  },
+  {
+    n: '03',
+    t: 'Activate & relax',
+    d: 'Pulsar watches the chain 24/7 and runs your workflow automatically — every run logged.',
+  },
 ];
 
 const features = [
-  { t: 'Real on-chain actions', d: 'Send/mint/burn tokens, transfer NFTs, stake, swap, create Raydium pools, run governance — signed and submitted for real.', icon: '⚡' },
-  { t: 'Live event detection', d: 'Raw RPC websockets watch wallets, SPL tokens, NFTs, programs, slots and prices — no polling, no API keys.', icon: '📡' },
-  { t: 'Visual builder', d: 'A Zapier-style drag-free builder. Trigger → action → action, with typed config for every step.', icon: '🧩' },
-  { t: 'Cross-chain ready', d: 'Publish Wormhole messages to bridge intent to other chains, straight from a workflow.', icon: '🌉' },
-  { t: 'Execution history', d: 'Every run is logged with status, trigger data and per-action results — with explorer links.', icon: '📜' },
-  { t: 'Your keys, your rules', d: 'Bring a devnet or mainnet signer. Off-chain actions need no key at all.', icon: '🔐' },
+  {
+    t: 'Real on-chain actions',
+    d: 'Send/mint/burn tokens, transfer NFTs, stake, swap, create Raydium pools, run governance — signed and submitted for real.',
+    icon: '⚡',
+  },
+  {
+    t: 'Live event detection',
+    d: 'Raw RPC websockets watch wallets, SPL tokens, NFTs, programs, slots and prices — no polling, no API keys.',
+    icon: '📡',
+  },
+  {
+    t: 'Visual builder',
+    d: 'A Zapier-style drag-free builder. Trigger → action → action, with typed config for every step.',
+    icon: '🧩',
+  },
+  {
+    t: 'Cross-chain ready',
+    d: 'Publish Wormhole messages to bridge intent to other chains, straight from a workflow.',
+    icon: '🌉',
+  },
+  {
+    t: 'Execution history',
+    d: 'Every run is logged with status, trigger data and per-action results — with explorer links.',
+    icon: '📜',
+  },
+  {
+    t: 'Your keys, your rules',
+    d: 'Bring a devnet or mainnet signer. Off-chain actions need no key at all.',
+    icon: '🔐',
+  },
 ];
 
 export default function LandingPage() {
@@ -71,8 +107,8 @@ export default function LandingPage() {
             transition={{ duration: 0.7, delay: 0.12 }}
             className="mt-6 max-w-2xl text-balance text-lg text-slate-400"
           >
-            {APP_NAME} is Zapier for the Solana ecosystem. When an on-chain event fires, your workflow
-            runs — sending tokens, swapping, notifying, or calling a contract. No code required.
+            {APP_NAME} is Zapier for the Solana ecosystem. When an on-chain event fires, your workflow runs — sending
+            tokens, swapping, notifying, or calling a contract. No code required.
           </motion.p>
 
           <motion.div
@@ -169,8 +205,8 @@ export default function LandingPage() {
               Ship your first automation today
             </h2>
             <p className="relative mx-auto mt-4 max-w-xl text-slate-300">
-              Create a free account, connect a trigger, and watch {APP_NAME} run it the moment your
-              event fires on-chain.
+              Create a free account, connect a trigger, and watch {APP_NAME} run it the moment your event fires
+              on-chain.
             </p>
             <div className="relative mt-8 flex justify-center gap-3">
               <Link href="/login" className="btn-primary px-7 py-3 text-base">
@@ -208,9 +244,24 @@ function SectionHeading({ eyebrow, title }: { eyebrow: string; title: string }) 
 
 function FlowVisual() {
   const nodes = [
-    { kind: 'TRIGGER', label: 'Wallet receives SOL', sub: '≥ 0.5 SOL', color: 'from-violet-500/30 to-violet-500/5 border-violet-400/30' },
-    { kind: 'ACTION', label: 'Send Discord alert', sub: 'webhook', color: 'from-emerald-500/30 to-emerald-500/5 border-emerald-400/30' },
-    { kind: 'ACTION', label: 'Swap to USDC', sub: 'Jupiter', color: 'from-cyan-500/30 to-cyan-500/5 border-cyan-400/30' },
+    {
+      kind: 'TRIGGER',
+      label: 'Wallet receives SOL',
+      sub: '≥ 0.5 SOL',
+      color: 'from-violet-500/30 to-violet-500/5 border-violet-400/30',
+    },
+    {
+      kind: 'ACTION',
+      label: 'Send Discord alert',
+      sub: 'webhook',
+      color: 'from-emerald-500/30 to-emerald-500/5 border-emerald-400/30',
+    },
+    {
+      kind: 'ACTION',
+      label: 'Swap to USDC',
+      sub: 'Jupiter',
+      color: 'from-cyan-500/30 to-cyan-500/5 border-cyan-400/30',
+    },
   ];
   return (
     <div className="flex flex-col items-stretch gap-3">
@@ -222,9 +273,7 @@ function FlowVisual() {
               <span className="text-[10px] text-slate-500">then</span>
             </div>
           )}
-          <div
-            className={`w-full rounded-2xl border bg-gradient-to-br ${n.color} px-5 py-4 text-left backdrop-blur`}
-          >
+          <div className={`w-full rounded-2xl border bg-gradient-to-br ${n.color} px-5 py-4 text-left backdrop-blur`}>
             <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400">{n.kind}</p>
             <div className="mt-1 flex items-center justify-between">
               <span className="font-display text-base font-semibold text-white">{n.label}</span>
