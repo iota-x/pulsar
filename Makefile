@@ -8,16 +8,24 @@
 #
 # We invoke the tsx/next binaries directly (not `npm run`) so a single Ctrl+C's
 # `kill 0` reaches the real processes — npm swallows the signal and orphans them.
+#
+# The trigger-service runs leader election (Redis lock) for HA. Locally there's
+# one instance, so `dev` clears any stale lock first — it leads immediately
+# instead of waiting out a previous run's lock TTL after a crash/force-kill.
+# Trigger health/liveness: http://localhost:4100/health.
 
 .DEFAULT_GOAL := help
 SHELL := /bin/bash
 BIN := $(CURDIR)/node_modules/.bin
+LEADER_LOCK := pulsar:leader:trigger-service
 
 .PHONY: dev db down help
 
 ## dev: start DB, then run backend + worker + trigger + frontend together
 dev: db
+	@docker compose exec -T redis redis-cli DEL $(LEADER_LOCK) >/dev/null 2>&1 || true
 	@echo "▶ Starting all services — press Ctrl+C to stop everything."
+	@echo "  frontend :3000   backend :4000   trigger health :4100"
 	@trap 'trap - INT TERM EXIT; echo; echo "■ Stopping services..."; kill 0' INT TERM EXIT; \
 	( cd apps/backend         && exec $(BIN)/tsx watch src/index.ts ) 2>&1 | awk '{ print "[backend]  " $$0; fflush() }' & \
 	( cd apps/worker          && exec $(BIN)/tsx watch src/index.ts ) 2>&1 | awk '{ print "[worker]   " $$0; fflush() }' & \
