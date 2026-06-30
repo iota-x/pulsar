@@ -9,6 +9,7 @@
 export * from './catalog';
 export * from './capabilities';
 export * from './networks';
+export * from './redis';
 import type { TriggerType, ActionType } from './catalog';
 
 // ---------------------------------------------------------------------------

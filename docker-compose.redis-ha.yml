@@ -1,0 +1,69 @@
+# High-availability Redis via Sentinel — removes the single-Redis SPOF.
+#
+#   1 primary + 2 replicas + 3 sentinels (quorum 2). The sentinels monitor the
+#   primary; if it dies, they elect and promote a replica, and clients (which
+#   connect THROUGH the sentinels) follow the new primary automatically.
+#
+#   Start:  docker compose -f docker-compose.redis-ha.yml up -d
+#   Point the apps at it:
+#     REDIS_SENTINELS=sentinel-1:26379,sentinel-2:26379,sentinel-3:26379
+#     REDIS_MASTER_NAME=mymaster
+#   (and put the apps on this compose's network, or merge the files).
+#
+# Single-box note: this survives a *process/container* failure of the primary.
+# True machine-failure HA needs the nodes on separate hosts (same topology) or a
+# managed HA Redis (Upstash / ElastiCache / Redis Cloud) — then just set
+# REDIS_SENTINELS/REDIS_URL accordingly; no app code changes.
+
+name: pulsar-redis-ha
+
+x-sentinel: &sentinel
+  image: redis:7-alpine
+  restart: unless-stopped
+  command:
+    - sh
+    - -c
+    - |
+      cat > /tmp/sentinel.conf <<EOF
+      port 26379
+      dir /tmp
+      sentinel resolve-hostnames yes
+      sentinel announce-hostnames yes
+      sentinel monitor mymaster redis-primary 6379 2
+      sentinel down-after-milliseconds mymaster 5000
+      sentinel failover-timeout mymaster 10000
+      sentinel parallel-syncs mymaster 1
+      EOF
+      exec redis-sentinel /tmp/sentinel.conf
+  depends_on:
+    - redis-primary
+
+x-replica: &replica
+  image: redis:7-alpine
+  restart: unless-stopped
+  command: redis-server --replicaof redis-primary 6379 --appendonly yes
+  depends_on:
+    - redis-primary
+
+services:
+  redis-primary:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: redis-server --appendonly yes
+    volumes:
+      - redis-primary-data:/data
+
+  redis-replica-1:
+    <<: *replica
+  redis-replica-2:
+    <<: *replica
+
+  sentinel-1:
+    <<: *sentinel
+  sentinel-2:
+    <<: *sentinel
+  sentinel-3:
+    <<: *sentinel
+
+volumes:
+  redis-primary-data:

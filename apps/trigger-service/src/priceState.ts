@@ -1,4 +1,5 @@
 import IORedis from 'ioredis';
+import { redisConnectionOptions } from '@web3-zapier/shared';
 
 /**
  * Durable edge-trigger state for token_price_threshold, persisted in Redis.
@@ -9,9 +10,7 @@ import IORedis from 'ioredis';
  * the worker's exactly-once claim can't dedupe them. For a stop-loss that means
  * a duplicate sell. Persisting the last satisfied state makes restarts safe.
  */
-const redis = new IORedis(process.env.REDIS_URL ?? 'redis://localhost:6379', {
-  maxRetriesPerRequest: null,
-});
+const redis = new IORedis({ ...redisConnectionOptions(), maxRetriesPerRequest: null });
 redis.on('error', (e) => console.error('[price-state] redis error:', e.message));
 
 const key = (workflowId: string) => `pulsar:price-fired:${workflowId}`;

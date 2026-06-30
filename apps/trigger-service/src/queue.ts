@@ -1,19 +1,8 @@
 import { Queue, type ConnectionOptions } from 'bullmq';
-import { EXECUTION_QUEUE, type ExecutionJob, dedupeKeyFor, bullmqJobId } from '@web3-zapier/shared';
-
-/** Parse a redis:// URL into BullMQ connection options. */
-const redisConnection = (url: string): ConnectionOptions => {
-  const u = new URL(url);
-  return {
-    host: u.hostname,
-    port: Number(u.port || 6379),
-    username: u.username || undefined,
-    password: u.password || undefined,
-  };
-};
+import { EXECUTION_QUEUE, type ExecutionJob, dedupeKeyFor, bullmqJobId, redisConnectionOptions } from '@web3-zapier/shared';
 
 const queue = new Queue<ExecutionJob>(EXECUTION_QUEUE, {
-  connection: redisConnection(process.env.REDIS_URL ?? 'redis://localhost:6379'),
+  connection: redisConnectionOptions() as ConnectionOptions,
 });
 
 /**

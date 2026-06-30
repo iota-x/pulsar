@@ -1,12 +1,11 @@
 import { Queue } from 'bullmq';
 import { EXECUTION_QUEUE, type ExecutionJob, dedupeKeyFor, bullmqJobId } from '@web3-zapier/shared';
-import { config } from '../config';
 import { redisConnection } from './redis';
 
-// Let BullMQ own its Redis connection (built from REDIS_URL) so we don't pin a
-// specific ioredis instance — avoids dual-package type/runtime mismatches.
+// Let BullMQ own its Redis connection (Sentinel-aware, from env) so we don't pin
+// a specific ioredis instance — avoids dual-package type/runtime mismatches.
 export const executionQueue = new Queue<ExecutionJob>(EXECUTION_QUEUE, {
-  connection: redisConnection(config.redisUrl),
+  connection: redisConnection(),
 });
 
 /** Enqueue a workflow for the worker to execute (stamped with a dedupe key). */

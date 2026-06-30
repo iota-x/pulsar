@@ -1,4 +1,5 @@
 import IORedis from 'ioredis';
+import { redisConnectionOptions } from '@web3-zapier/shared';
 
 /**
  * Per-target watch cursors (last-seen tx signature), persisted in Redis so the
@@ -6,9 +7,7 @@ import IORedis from 'ioredis';
  * events. Replayed signatures are deduped downstream by the worker's
  * exactly-once claim, so backfill is safe to re-run.
  */
-const redis = new IORedis(process.env.REDIS_URL ?? 'redis://localhost:6379', {
-  maxRetriesPerRequest: null,
-});
+const redis = new IORedis({ ...redisConnectionOptions(), maxRetriesPerRequest: null });
 redis.on('error', (e) => console.error('[cursor] redis error:', e.message));
 
 const key = (target: string) => `pulsar:cursor:${target}`;

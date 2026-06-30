@@ -171,3 +171,36 @@ the user notices and revokes — a much smaller blast radius than a lifetime cap
 > delegations created by the *previous* version must be revoked and re-created (their
 > on-chain accounts predate the new fields). On devnet just revoke + re-authorize from
 > the Wallet page.
+
+## High availability (production)
+
+The single-VM setup survives *process/container* crashes (Docker `restart` + the
+watcher's leader election + Redis Sentinel) but not a *machine* failure. Everything is
+already built to span hosts — services coordinate through Redis, so going multi-host is
+**configuration, not code**:
+
+1. **Trigger-service (the watcher)** already runs 2 replicas with Redis leader election:
+   only the leader watches/enqueues; a standby takes over in ~12s. For machine-HA, run
+   those replicas on **separate hosts** — they just need the same Redis.
+
+2. **Redis** is the coordinator + queue, so it must be HA too. Use
+   `docker-compose.redis-ha.yml` (Sentinel: primary + 2 replicas + 3 sentinels) spread
+   **across hosts**, or a managed HA Redis (Upstash / ElastiCache / Redis Cloud). Then:
+   - `REDIS_SENTINELS=host1:26379,host2:26379,host3:26379` + `REDIS_MASTER_NAME=mymaster`, or
+   - `REDIS_URL=<managed-endpoint>`
+
+   No app changes — every service uses the shared Sentinel-aware connection builder.
+
+3. **RPC** — a dead RPC blinds the watcher even when it's healthy. Give it 2+ providers
+   (same cluster): `SOLANA_RPC_URLS=https://your-helius,https://your-alchemy`. It probes
+   the active endpoint and rotates on an unreachable *or* stalled node.
+
+4. **Workers** are stateless and horizontally scalable — run as many as you want. BullMQ
+   distributes jobs and the worker's exactly-once claim prevents double-execution; no
+   leader needed.
+
+5. **Backend / frontend** are stateless — run multiple behind a load balancer.
+
+**Minimal production HA:** two hosts, each running a trigger replica + worker(s) +
+backend, a 3-node Sentinel Redis (or managed), and `SOLANA_RPC_URLS` with two providers.
+Any single host — or RPC, or the Redis primary — can then fail without stopping automations.

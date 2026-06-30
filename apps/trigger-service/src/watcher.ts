@@ -67,6 +67,16 @@ export class SolanaWatcher {
     this.onEvent = onEvent;
   }
 
+  /**
+   * Liveness probe for the active RPC: the current confirmed slot, or throws.
+   * A reachable node returns a steadily-advancing slot; an unreachable one throws
+   * and a stuck/lagging one returns a frozen slot — the RPC-failover monitor uses
+   * both signals to decide when to rotate endpoints.
+   */
+  currentSlot(): Promise<number> {
+    return this.connection.getSlot('confirmed');
+  }
+
   /** Reconcile all live subscriptions with the desired target sets. */
   async sync(t: SyncTargets): Promise<void> {
     await this.reconcile(this.accountSubs, t.wallets, (w) => this.subscribeWallet(w), (w) => this.unsubscribeWallet(w));

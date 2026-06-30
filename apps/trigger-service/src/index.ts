@@ -15,20 +15,31 @@ import {
 } from './match';
 import { getFiredStates, setFiredState } from './priceState';
 
-const RPC_URL = process.env.SOLANA_RPC_URL ?? 'https://api.devnet.solana.com';
-// WS follows the RPC unless explicitly overridden — so a dedicated RPC needs
-// only SOLANA_RPC_URL set.
-const WS_URL = solanaWsUrl(RPC_URL, process.env.SOLANA_WS_URL);
+// RPC failover: a comma-separated SOLANA_RPC_URLS list (or the single
+// SOLANA_RPC_URL) the watcher rotates through when an endpoint dies or stalls —
+// so a leader can't be "alive but blind to the chain". All entries must be the
+// same cluster. WS follows the active RPC unless SOLANA_WS_URL overrides it.
+const RPC_URLS = (process.env.SOLANA_RPC_URLS ?? process.env.SOLANA_RPC_URL ?? 'https://api.devnet.solana.com')
+  .split(',')
+  .map((s) => s.trim())
+  .filter(Boolean);
+let rpcIndex = 0;
+const currentRpc = () => RPC_URLS[rpcIndex % RPC_URLS.length];
+const currentWs = () => solanaWsUrl(currentRpc(), process.env.SOLANA_WS_URL);
+
 const REFRESH_INTERVAL_MS = Number(process.env.REFRESH_INTERVAL_MS ?? 15000);
 const PRICE_POLL_MS = Number(process.env.PRICE_POLL_MS ?? 30000);
+const RPC_HEALTH_MS = Number(process.env.RPC_HEALTH_MS ?? 10000);
+const RPC_FAIL_THRESHOLD = Number(process.env.RPC_FAIL_THRESHOLD ?? 3); // consecutive failed probes → rotate
+const RPC_STALL_THRESHOLD = Number(process.env.RPC_STALL_THRESHOLD ?? 6); // consecutive no-progress probes → rotate
 const HEALTH_PORT = Number(process.env.HEALTH_PORT ?? 4100);
 const JUPITER_PRICE_API = process.env.JUPITER_PRICE_API ?? 'https://api.jup.ag/price/v2';
 
 // Trigger type → subscription family lives in ./match (shared with the matcher).
 
-// Cluster-specific program addresses resolve from SOLANA_RPC_URL (devnet vs
-// mainnet); an explicit env override still wins for custom/relocated programs.
-const net = resolveNetwork(RPC_URL);
+// Cluster-specific program addresses resolve from the RPC (devnet vs mainnet);
+// every failover endpoint is the same cluster, so the first one decides it.
+const net = resolveNetwork(RPC_URLS[0]);
 
 // Trigger types detected by watching a fixed well-known program's logs.
 const FIXED_PROGRAMS: Record<string, string> = {
@@ -202,6 +213,7 @@ async function pollPrices(): Promise<void> {
 let watcher: SolanaWatcher | null = null;
 let refreshTimer: NodeJS.Timeout | null = null;
 let priceTimer: NodeJS.Timeout | null = null;
+let rpcHealthTimer: NodeJS.Timeout | null = null;
 
 const EMPTY_TARGETS = {
   wallets: new Set<string>(),
@@ -213,8 +225,8 @@ const EMPTY_TARGETS = {
 };
 
 async function startWatching(): Promise<void> {
-  console.log('🛰️  leader active — starting watcher');
-  watcher = new SolanaWatcher(RPC_URL, WS_URL, (event) => {
+  console.log(`🛰️  leader active — starting watcher on ${currentRpc()}`);
+  watcher = new SolanaWatcher(currentRpc(), currentWs(), (event) => {
     handleEvent(event).catch((err) => console.error('[trigger] handleEvent error:', err));
   });
   const refresh = async () => {
@@ -227,6 +239,7 @@ async function startWatching(): Promise<void> {
   await refresh();
   refreshTimer = setInterval(() => void refresh(), REFRESH_INTERVAL_MS);
   priceTimer = setInterval(() => void pollPrices(), PRICE_POLL_MS);
+  startRpcHealthMonitor();
   console.log(
     `🛰️  Watching ${index.size} target(s), ${scheduleTimers.size} schedule(s), ${priceWatches.length} price(s); refresh ${REFRESH_INTERVAL_MS}ms`,
   );
@@ -237,7 +250,8 @@ async function stopWatching(): Promise<void> {
   console.log('🛑 standby — stopping watcher');
   if (refreshTimer) clearInterval(refreshTimer);
   if (priceTimer) clearInterval(priceTimer);
-  refreshTimer = priceTimer = null;
+  if (rpcHealthTimer) clearInterval(rpcHealthTimer);
+  refreshTimer = priceTimer = rpcHealthTimer = null;
   for (const t of scheduleTimers.values()) clearInterval(t);
   scheduleTimers.clear();
   if (watcher) {
@@ -252,17 +266,82 @@ async function stopWatching(): Promise<void> {
   priceWatches = [];
 }
 
+// --- RPC failover ------------------------------------------------------------
+let lastSlot = -1;
+let probeFailures = 0;
+let stallCount = 0;
+
+function withTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
+  let timer: NodeJS.Timeout;
+  const timeout = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new Error(`probe timed out after ${ms}ms`)), ms);
+  });
+  return Promise.race([p.finally(() => clearTimeout(timer)), timeout]);
+}
+
+/** Probe the active RPC; rotate to the next endpoint when it's down or stalled. */
+async function probeRpc(): Promise<void> {
+  if (!watcher) return;
+  try {
+    const slot = await withTimeout(watcher.currentSlot(), 5000);
+    probeFailures = 0;
+    if (slot > lastSlot) {
+      lastSlot = slot;
+      stallCount = 0;
+    } else {
+      stallCount += 1;
+      if (stallCount >= RPC_STALL_THRESHOLD) {
+        await rotateRpc(`slot frozen at ${lastSlot} for ${stallCount} probes`);
+      }
+    }
+  } catch (err) {
+    probeFailures += 1;
+    const detail = err instanceof Error ? err.message : String(err);
+    console.error(`[rpc] probe failed (${probeFailures}/${RPC_FAIL_THRESHOLD}) on ${currentRpc()}: ${detail}`);
+    if (probeFailures >= RPC_FAIL_THRESHOLD) await rotateRpc('endpoint unreachable');
+  }
+}
+
+/** Advance to the next RPC endpoint and rebuild the watcher (re-subscribes all). */
+async function rotateRpc(reason: string): Promise<void> {
+  const from = currentRpc();
+  if (RPC_URLS.length > 1) rpcIndex = (rpcIndex + 1) % RPC_URLS.length;
+  const to = currentRpc();
+  console.error(
+    `[rpc] ⚠ FAILOVER (${reason}) — ${from} → ${to}${RPC_URLS.length === 1 ? ' (single endpoint: reconnecting)' : ''}`,
+  );
+  await stopWatching();
+  await startWatching(); // re-syncs every target on the new connection
+}
+
+function startRpcHealthMonitor(): void {
+  if (rpcHealthTimer) clearInterval(rpcHealthTimer);
+  lastSlot = -1;
+  probeFailures = 0;
+  stallCount = 0;
+  rpcHealthTimer = setInterval(() => void probeRpc(), RPC_HEALTH_MS);
+}
+
 let leaderHandle: LeaderHandle | null = null;
 
 async function main() {
-  console.log(`🛰️  Trigger service starting (RPC: ${RPC_URL}) — awaiting leadership`);
+  console.log(`🛰️  Trigger service starting (${RPC_URLS.length} RPC endpoint(s)) — awaiting leadership`);
 
   // Liveness/observability endpoint. A standby is healthy (correctly idle); the
   // health is about process responsiveness, not leadership.
   http
     .createServer((_req, res) => {
       res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ ok: true, leader: leaderHandle?.isLeader ?? false, targets: index.size, priceWatches: priceWatches.length }));
+      res.end(
+        JSON.stringify({
+          ok: true,
+          leader: leaderHandle?.isLeader ?? false,
+          rpc: currentRpc(),
+          rpcEndpoints: RPC_URLS.length,
+          targets: index.size,
+          priceWatches: priceWatches.length,
+        }),
+      );
     })
     .listen(HEALTH_PORT, () => console.log(`[health] listening on :${HEALTH_PORT}`));
 

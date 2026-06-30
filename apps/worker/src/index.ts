@@ -1,19 +1,8 @@
 import 'dotenv/config';
 import { Worker, type ConnectionOptions } from 'bullmq';
-import { EXECUTION_QUEUE, type ExecutionJob } from '@web3-zapier/shared';
+import { EXECUTION_QUEUE, type ExecutionJob, redisConnectionOptions } from '@web3-zapier/shared';
 import { executeWorkflow } from './executor';
 import { deadLetter } from './deadLetter';
-
-/** Parse a redis:// URL into BullMQ connection options. */
-const redisConnection = (url: string): ConnectionOptions => {
-  const u = new URL(url);
-  return {
-    host: u.hostname,
-    port: Number(u.port || 6379),
-    username: u.username || undefined,
-    password: u.password || undefined,
-  };
-};
 
 const worker = new Worker<ExecutionJob>(
   EXECUTION_QUEUE,
@@ -22,7 +11,7 @@ const worker = new Worker<ExecutionJob>(
     await executeWorkflow(job.data);
   },
   {
-    connection: redisConnection(process.env.REDIS_URL ?? 'redis://localhost:6379'),
+    connection: redisConnectionOptions() as ConnectionOptions,
     concurrency: Number(process.env.WORKER_CONCURRENCY ?? 5),
   },
 );

@@ -1,5 +1,6 @@
 import IORedis from 'ioredis';
 import { randomUUID } from 'crypto';
+import { redisConnectionOptions } from '@web3-zapier/shared';
 
 /**
  * Active-passive leader election over a Redis lock, so the trigger-service can
@@ -29,7 +30,7 @@ export function runWithLeaderElection(opts: {
   onElected: () => void | Promise<void>;
   onDeposed: () => void | Promise<void>;
 }): LeaderHandle {
-  const redis = new IORedis(process.env.REDIS_URL ?? 'redis://localhost:6379', { maxRetriesPerRequest: null });
+  const redis = new IORedis({ ...redisConnectionOptions(), maxRetriesPerRequest: null });
   redis.on('error', (e) => console.error('[leader] redis error:', e.message));
   const id = randomUUID();
   let leader = false;
