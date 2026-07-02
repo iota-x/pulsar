@@ -8,6 +8,8 @@ import {
   planAction,
   ACTION_BY_TYPE,
   custodyOf,
+  isActionAvailable,
+  toSupportedNetwork,
 } from '@web3-zapier/shared';
 import prisma from './prisma';
 import { actionHandlers } from './actions';
@@ -57,6 +59,10 @@ export async function executeWorkflow(job: ExecutionJob): Promise<void> {
     return;
   }
 
+  // The cluster this workflow runs on — decides connections and, as a final
+  // guard, which actions may execute (mainnet is off-chain only).
+  const network = toSupportedNetwork(workflow.network);
+
   // Dry-run: validate + describe, never touch the chain, never persist a log.
   if (dryRun) {
     const plan = workflow.actions.map((action) => describeAction(action.id, action.type, action.config));
@@ -101,6 +107,16 @@ export async function executeWorkflow(job: ExecutionJob): Promise<void> {
       continue;
     }
 
+    // Defense in depth: the API blocks disallowed actions at save time, but never
+    // execute one that isn't permitted on this workflow's network (e.g. a
+    // fund-moving action on mainnet).
+    if (!isActionAvailable(action.type, network)) {
+      const detail = `"${action.type}" is not available on ${network}`;
+      results.push({ actionId: action.id, type: action.type, status: 'failed', detail });
+      console.warn(`[executor] ✗ ${action.type}: ${detail}`);
+      continue;
+    }
+
     const handler = actionHandlers[action.type];
 
     // No off-chain handler → record as simulated rather than pretending to run.
@@ -134,7 +150,7 @@ export async function executeWorkflow(job: ExecutionJob): Promise<void> {
         config.owner = workflow.user.walletAddress;
       }
 
-      const detail = await handler(config, triggerData);
+      const detail = await handler(config, triggerData, { network });
       results.push({ actionId: action.id, type: action.type, status: 'success', detail });
       console.log(`[executor] ✓ ${action.type}: ${detail}`);
     } catch (err) {

@@ -15,6 +15,9 @@ export {
   placeholdersFor,
   custodyOf,
   requiresMainnet,
+  isActionAvailable,
+  isTriggerAvailable,
+  DEFAULT_NETWORK,
 } from '@web3-zapier/shared';
 export type {
   TriggerType,
@@ -25,9 +28,10 @@ export type {
   WorkflowTemplate,
   Custody,
   NetworkReq,
+  SupportedNetwork,
 } from '@web3-zapier/shared';
 
-import type { TriggerType, ActionType } from '@web3-zapier/shared';
+import type { TriggerType, ActionType, SupportedNetwork } from '@web3-zapier/shared';
 
 export interface Trigger {
   id: string;
@@ -47,6 +51,7 @@ export interface Workflow {
   name: string;
   description?: string | null;
   isActive: boolean;
+  network: SupportedNetwork;
   createdAt: string;
   trigger?: Trigger | null;
   actions?: Action[];

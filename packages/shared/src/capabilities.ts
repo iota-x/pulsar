@@ -143,3 +143,43 @@ export function isRunnableOn(type: ActionType | TriggerType, cluster: Cluster): 
   if (!requiresMainnet(type)) return true;
   return cluster === 'mainnet-beta';
 }
+
+// ---------------------------------------------------------------------------
+// Per-workflow network policy — which clusters users can target, and which
+// custody models may actually EXECUTE on each. Devnet is the free full-catalog
+// default; mainnet is deliberately limited to off-chain actions because the
+// delegation program isn't deployed there and we never move real funds.
+// Widening mainnet later (e.g. after a mainnet program deploy) is a one-line
+// edit to NETWORK_CUSTODY_POLICY — no other code changes.
+// ---------------------------------------------------------------------------
+
+/** Clusters a workflow can be assigned to (a user-facing subset of Cluster). */
+export type SupportedNetwork = 'devnet' | 'mainnet-beta';
+
+/** Default cluster for new/legacy workflows — free and fully featured. */
+export const DEFAULT_NETWORK: SupportedNetwork = 'devnet';
+
+/**
+ * Which custody models are permitted to execute on each cluster in THIS
+ * deployment. Off-chain ('none') runs anywhere; 'operator'/'delegated' move
+ * value and stay devnet-only until a mainnet program deploy + funded operator.
+ */
+export const NETWORK_CUSTODY_POLICY: Record<SupportedNetwork, Custody[]> = {
+  devnet: ['none', 'operator', 'delegated'],
+  'mainnet-beta': ['none'], // off-chain only — no mainnet program, no real funds
+};
+
+/** Can this action be built/run on the given network (cluster + custody policy)? */
+export function isActionAvailable(type: ActionType, network: SupportedNetwork): boolean {
+  return isRunnableOn(type, network) && NETWORK_CUSTODY_POLICY[network].includes(custodyOf(type));
+}
+
+/** Can this trigger be built/run on the given network (triggers never move funds)? */
+export function isTriggerAvailable(type: TriggerType, network: SupportedNetwork): boolean {
+  return isRunnableOn(type, network);
+}
+
+/** Narrow an arbitrary string to a SupportedNetwork, falling back to the default. */
+export function toSupportedNetwork(value: string | null | undefined): SupportedNetwork {
+  return value === 'mainnet-beta' ? 'mainnet-beta' : DEFAULT_NETWORK;
+}

@@ -10,9 +10,13 @@ import {
   placeholdersFor,
   custodyOf,
   requiresMainnet,
+  isTriggerAvailable,
+  isActionAvailable,
+  DEFAULT_NETWORK,
   type TriggerType,
   type ActionType,
   type Implementation,
+  type SupportedNetwork,
 } from '@/lib/types';
 import { TRIGGER_FIELDS, ACTION_FIELDS, type FieldDef } from '@/lib/fields';
 
@@ -26,6 +30,7 @@ export interface ActionDraft {
 export interface WorkflowDraft {
   name: string;
   description?: string;
+  network: SupportedNetwork;
   trigger: { type: TriggerType; config: Config };
   actions: { type: ActionType; config: Config }[];
 }
@@ -33,6 +38,7 @@ export interface WorkflowDraft {
 export interface WorkflowInitial {
   name: string;
   description: string;
+  network: SupportedNetwork;
   triggerType: TriggerType;
   triggerConfig: Config;
   actions: ActionDraft[];
@@ -41,6 +47,7 @@ export interface WorkflowInitial {
 export const EMPTY_WORKFLOW: WorkflowInitial = {
   name: '',
   description: '',
+  network: DEFAULT_NETWORK,
   triggerType: 'wallet_received_sol',
   triggerConfig: {},
   actions: [{ type: 'send_discord_message', config: {} }],
@@ -192,20 +199,49 @@ export function WorkflowBuilder({
   submitLabel,
   initial,
   onSubmit,
+  mainnetEnabled = false,
 }: {
   heading: string;
   submitLabel: string;
   initial: WorkflowInitial;
   onSubmit: (draft: WorkflowDraft) => Promise<void>;
+  /** Whether the deployment has a mainnet RPC (enables the mainnet toggle). */
+  mainnetEnabled?: boolean;
 }) {
   const router = useRouter();
   const [name, setName] = useState(initial.name);
   const [description, setDescription] = useState(initial.description);
+  const [network, setNetwork] = useState<SupportedNetwork>(initial.network);
   const [triggerType, setTriggerType] = useState<TriggerType>(initial.triggerType);
   const [triggerConfig, setTriggerConfig] = useState<Config>(initial.triggerConfig);
   const [actions, setActions] = useState<ActionDraft[]>(initial.actions);
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
+
+  // Only triggers/actions runnable on the selected network are offered. On
+  // mainnet that's monitoring + off-chain actions; devnet keeps the full catalog.
+  const triggerChoices = TRIGGER_CATALOG.filter((t) => isTriggerAvailable(t.type, network));
+  const actionChoices = ACTION_CATALOG.filter((a) => isActionAvailable(a.type, network));
+
+  // Switching network can invalidate the current picks — snap them back to the
+  // first still-available option so the form never holds a disallowed type.
+  const switchNetwork = (next: SupportedNetwork) => {
+    if (next === network) return;
+    setNetwork(next);
+    if (!isTriggerAvailable(triggerType, next)) {
+      const fallback = TRIGGER_CATALOG.find((t) => isTriggerAvailable(t.type, next));
+      if (fallback) {
+        setTriggerType(fallback.type);
+        setTriggerConfig({});
+      }
+    }
+    const firstAction = ACTION_CATALOG.find((a) => isActionAvailable(a.type, next));
+    setActions((prev) =>
+      prev.map((a) =>
+        isActionAvailable(a.type, next) || !firstAction ? a : { type: firstAction.type, config: {} },
+      ),
+    );
+  };
 
   const setTriggerField = (key: string, value: string) => setTriggerConfig((c) => ({ ...c, [key]: value }));
 
@@ -215,7 +251,12 @@ export function WorkflowBuilder({
   const setActionField = (i: number, key: string, value: string) =>
     setActions((prev) => prev.map((a, idx) => (idx === i ? { ...a, config: { ...a.config, [key]: value } } : a)));
 
-  const addAction = () => setActions((prev) => [...prev, { type: 'store_log', config: {} }]);
+  const addAction = () => {
+    const type = isActionAvailable('store_log', network)
+      ? 'store_log'
+      : (actionChoices[0]?.type ?? 'store_log');
+    setActions((prev) => [...prev, { type, config: {} }]);
+  };
   const removeAction = (i: number) => setActions((prev) => prev.filter((_, idx) => idx !== i));
   const move = (i: number, dir: -1 | 1) =>
     setActions((prev) => {
@@ -237,6 +278,7 @@ export function WorkflowBuilder({
       await onSubmit({
         name,
         description: description || undefined,
+        network,
         trigger: { type: triggerType, config: clean(triggerConfig) },
         actions: actions.map((a) => ({ type: a.type, config: clean(a.config) })),
       });
@@ -271,6 +313,36 @@ export function WorkflowBuilder({
             placeholder="Optional"
           />
         </div>
+        <div>
+          <label className="label">Network</label>
+          <div className="flex gap-2">
+            {(['devnet', 'mainnet-beta'] as const).map((n) => {
+              const disabled = n === 'mainnet-beta' && !mainnetEnabled;
+              const active = network === n;
+              return (
+                <button
+                  key={n}
+                  type="button"
+                  disabled={disabled}
+                  onClick={() => switchNetwork(n)}
+                  title={disabled ? 'Mainnet is not enabled on this deployment' : undefined}
+                  className={`flex-1 rounded-xl border px-3 py-2 text-sm font-medium transition ${
+                    active
+                      ? 'border-brand bg-brand/15 text-brand'
+                      : 'border-white/10 bg-white/[0.03] text-slate-300 hover:bg-white/[0.06]'
+                  } ${disabled ? 'cursor-not-allowed opacity-40' : ''}`}
+                >
+                  {n === 'devnet' ? 'Devnet' : 'Mainnet'}
+                </button>
+              );
+            })}
+          </div>
+          <p className="mt-1.5 text-xs text-slate-500">
+            {network === 'mainnet-beta'
+              ? 'Mainnet: monitoring triggers and off-chain actions (alerts, webhooks). Fund-moving actions are devnet-only.'
+              : 'Devnet: the full catalog, free test funds. Switch to Mainnet for real-chain monitoring & alerts.'}
+          </p>
+        </div>
       </div>
 
       {/* Trigger */}
@@ -289,7 +361,7 @@ export function WorkflowBuilder({
             setTriggerConfig({});
           }}
         >
-          {TRIGGER_CATALOG.map((t) => (
+          {triggerChoices.map((t) => (
             <option key={t.type} value={t.type}>
               {t.label}
             </option>
@@ -332,7 +404,7 @@ export function WorkflowBuilder({
               value={action.type}
               onChange={(e) => updateAction(i, { type: e.target.value as ActionType, config: {} })}
             >
-              {ACTION_CATALOG.map((t) => (
+              {actionChoices.map((t) => (
                 <option key={t.type} value={t.type}>
                   {t.label}
                 </option>

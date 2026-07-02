@@ -12,6 +12,11 @@ import {
   TRIGGER_TYPES,
   TRIGGER_PLACEHOLDERS,
   placeholdersFor,
+  isActionAvailable,
+  isTriggerAvailable,
+  toSupportedNetwork,
+  DEFAULT_NETWORK,
+  ACTION_CAPABILITIES,
   type TriggerData,
 } from '../index';
 
@@ -168,5 +173,48 @@ describe('catalog + template integrity', () => {
   it('template ids are unique', () => {
     const ids = WORKFLOW_TEMPLATES.map((t) => t.id);
     expect(new Set(ids).size).toBe(ids.length);
+  });
+});
+
+describe('per-network availability policy', () => {
+  it('devnet allows the full catalog (every action + trigger)', () => {
+    for (const type of Object.keys(ACTION_CAPABILITIES)) {
+      // Only mainnet-required actions are excluded on devnet (no liquidity/data).
+      const expected = ACTION_CAPABILITIES[type as keyof typeof ACTION_CAPABILITIES].network !== 'mainnet';
+      expect(isActionAvailable(type as any, 'devnet'), type).toBe(expected);
+    }
+    for (const t of TRIGGER_TYPES) {
+      const expected = !['token_price_threshold', 'new_token_listing', 'cross_chain_token_transfer'].includes(t);
+      expect(isTriggerAvailable(t, 'devnet'), t).toBe(expected);
+    }
+  });
+
+  it('mainnet allows only off-chain (custody: none) actions', () => {
+    // Off-chain webhook — allowed on mainnet (no funds move).
+    expect(isActionAvailable('send_webhook', 'mainnet-beta')).toBe(true);
+    expect(isActionAvailable('send_email', 'mainnet-beta')).toBe(true);
+    expect(isActionAvailable('fetch_latest_transactions', 'mainnet-beta')).toBe(true);
+    // Fund-moving — blocked on mainnet (no program deploy, no real funds).
+    expect(isActionAvailable('mint_tokens', 'mainnet-beta')).toBe(false); // operator
+    expect(isActionAvailable('send_tokens', 'mainnet-beta')).toBe(false); // delegated
+    expect(isActionAvailable('execute_buy_sell_order', 'mainnet-beta')).toBe(false); // delegated + mainnet
+  });
+
+  it('mainnet-only capabilities are blocked on devnet, available on mainnet triggers', () => {
+    // execute_buy_sell_order needs mainnet liquidity — never runnable on devnet...
+    expect(isActionAvailable('execute_buy_sell_order', 'devnet')).toBe(false);
+    // ...and still blocked on mainnet here because it's delegated (custody policy).
+    expect(isActionAvailable('execute_buy_sell_order', 'mainnet-beta')).toBe(false);
+    // Price-threshold trigger moves no funds, so it's usable on mainnet but not devnet.
+    expect(isTriggerAvailable('token_price_threshold', 'devnet')).toBe(false);
+    expect(isTriggerAvailable('token_price_threshold', 'mainnet-beta')).toBe(true);
+  });
+
+  it('toSupportedNetwork narrows strings and defaults safely', () => {
+    expect(toSupportedNetwork('mainnet-beta')).toBe('mainnet-beta');
+    expect(toSupportedNetwork('devnet')).toBe('devnet');
+    expect(toSupportedNetwork(undefined)).toBe(DEFAULT_NETWORK);
+    expect(toSupportedNetwork('garbage')).toBe(DEFAULT_NETWORK);
+    expect(DEFAULT_NETWORK).toBe('devnet');
   });
 });

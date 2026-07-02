@@ -30,6 +30,9 @@ model Workflow {
   actions     Action[]
   logs        Log[]
   isActive    Boolean   @default(true)
+  // Solana cluster this workflow runs on: "devnet" (default, full catalog) or
+  // "mainnet-beta" (off-chain actions only — see NETWORK_CUSTODY_POLICY).
+  network     String    @default("devnet")
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
 }

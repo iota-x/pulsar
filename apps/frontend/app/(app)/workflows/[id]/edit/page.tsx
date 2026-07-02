@@ -20,6 +20,7 @@ export default function EditWorkflowPage() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
   const [initial, setInitial] = useState<WorkflowInitial | null>(null);
+  const [mainnetEnabled, setMainnetEnabled] = useState(false);
   const [error, setError] = useState('');
 
   useEffect(() => {
@@ -28,6 +29,7 @@ export default function EditWorkflowPage() {
         setInitial({
           name: wf.name,
           description: wf.description ?? '',
+          network: wf.network ?? EMPTY_WORKFLOW.network,
           triggerType: (wf.trigger?.type as TriggerType) ?? EMPTY_WORKFLOW.triggerType,
           triggerConfig: toConfig(wf.trigger?.config),
           actions:
@@ -39,6 +41,12 @@ export default function EditWorkflowPage() {
       .catch((e) => setError(e.message));
   }, [id]);
 
+  useEffect(() => {
+    api<{ mainnetEnabled: boolean }>('/config')
+      .then((c) => setMainnetEnabled(c.mainnetEnabled))
+      .catch(() => setMainnetEnabled(false));
+  }, []);
+
   const save = async (draft: WorkflowDraft) => {
     await api(`/workflows/${id}`, { method: 'PUT', body: JSON.stringify(draft) });
     router.push(`/workflows/${id}`);
@@ -47,5 +55,13 @@ export default function EditWorkflowPage() {
   if (error) return <p className="text-rose-400">{error}</p>;
   if (!initial) return <p className="text-slate-400">Loading…</p>;
 
-  return <WorkflowBuilder heading="Edit workflow" submitLabel="Save changes" initial={initial} onSubmit={save} />;
+  return (
+    <WorkflowBuilder
+      heading="Edit workflow"
+      submitLabel="Save changes"
+      initial={initial}
+      onSubmit={save}
+      mainnetEnabled={mainnetEnabled}
+    />
+  );
 }

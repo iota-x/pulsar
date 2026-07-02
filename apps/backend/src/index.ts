@@ -28,6 +28,12 @@ app.use(express.json());
 
 app.get('/health', (_req, res) => res.json({ status: 'ok' }));
 
+// Public deployment flags the UI reads on load. `mainnetEnabled` gates the
+// builder's mainnet option — it's on only when a mainnet RPC is configured.
+app.get('/config', (_req, res) =>
+  res.json({ mainnetEnabled: Boolean(process.env.SOLANA_RPC_URL_MAINNET?.trim()) }),
+);
+
 // Prebuilt workflow recipes (public — no user data).
 app.get('/templates', (_req, res) => res.json(WORKFLOW_TEMPLATES));
 

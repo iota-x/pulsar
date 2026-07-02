@@ -1,15 +1,41 @@
 import { Connection, Keypair, PublicKey } from '@solana/web3.js';
 import bs58 from 'bs58';
-import { solanaWsUrl } from '@web3-zapier/shared';
+import { solanaWsUrl, type SupportedNetwork } from '@web3-zapier/shared';
 
 export const RPC_URL = process.env.SOLANA_RPC_URL ?? 'https://api.devnet.solana.com';
+const MAINNET_RPC_URL = process.env.SOLANA_RPC_URL_MAINNET?.trim();
 
 // Pin the ws endpoint to (a derivative of) the RPC so a dedicated provider is
-// used for subscriptions too, not just HTTP calls.
+// used for subscriptions too, not just HTTP calls. This is the primary (usually
+// devnet) connection — the one every on-chain action uses, since fund-moving
+// actions are devnet-only under NETWORK_CUSTODY_POLICY.
 export const connection = new Connection(RPC_URL, {
   commitment: 'confirmed',
   wsEndpoint: solanaWsUrl(RPC_URL, process.env.SOLANA_WS_URL),
 });
+
+const connectionCache = new Map<SupportedNetwork, Connection>();
+
+/**
+ * Resolve the Connection for a workflow's network. Devnet (and any non-mainnet)
+ * uses the primary `connection`; mainnet gets its own memoized connection from
+ * SOLANA_RPC_URL_MAINNET. Only off-chain, chain-reading actions (e.g.
+ * fetch_latest_transactions) need this — value-moving actions stay on devnet.
+ * Falls back to the primary connection if mainnet isn't configured (mainnet
+ * workflows can't be created without it, so this only guards misconfiguration).
+ */
+export function connectionFor(network: SupportedNetwork): Connection {
+  if (network !== 'mainnet-beta') return connection;
+  const cached = connectionCache.get('mainnet-beta');
+  if (cached) return cached;
+  if (!MAINNET_RPC_URL) return connection;
+  const conn = new Connection(MAINNET_RPC_URL, {
+    commitment: 'confirmed',
+    wsEndpoint: solanaWsUrl(MAINNET_RPC_URL, process.env.SOLANA_WS_URL_MAINNET),
+  });
+  connectionCache.set('mainnet-beta', conn);
+  return conn;
+}
 
 let signer: Keypair | null | undefined;
 
@@ -48,16 +74,19 @@ export function toPublicKey(value: unknown, label: string): PublicKey {
   }
 }
 
-function clusterQuery(): string {
+function clusterQuery(network?: SupportedNetwork): string {
+  if (network === 'mainnet-beta') return '';
+  if (network === 'devnet') return '?cluster=devnet';
+  // No explicit network → derive from the primary RPC (back-compat).
   return RPC_URL.includes('devnet') ? '?cluster=devnet' : RPC_URL.includes('testnet') ? '?cluster=testnet' : '';
 }
 
-/** Block explorer URL for a signature on the active cluster. */
-export function explorerUrl(signature: string): string {
-  return `https://explorer.solana.com/tx/${signature}${clusterQuery()}`;
+/** Block explorer URL for a signature (on the given network, or the primary cluster). */
+export function explorerUrl(signature: string, network?: SupportedNetwork): string {
+  return `https://explorer.solana.com/tx/${signature}${clusterQuery(network)}`;
 }
 
-/** Block explorer URL for an account/address on the active cluster. */
-export function explorerAddress(address: string): string {
-  return `https://explorer.solana.com/address/${address}${clusterQuery()}`;
+/** Block explorer URL for an account/address (on the given network, or the primary cluster). */
+export function explorerAddress(address: string, network?: SupportedNetwork): string {
+  return `https://explorer.solana.com/address/${address}${clusterQuery(network)}`;
 }

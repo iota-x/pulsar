@@ -104,7 +104,11 @@ describe('executeWorkflow — custody policy (non-custodial by default)', () => 
       triggerData: { triggerType: 'wallet_received_token', signature: 's' },
     });
 
-    expect(handlerMock).toHaveBeenCalledWith(expect.objectContaining({ owner: 'UserWa11et' }), expect.anything());
+    expect(handlerMock).toHaveBeenCalledWith(
+      expect.objectContaining({ owner: 'UserWa11et' }),
+      expect.anything(),
+      expect.objectContaining({ network: 'devnet' }),
+    );
   });
 
   it('fails a delegated action when no wallet is linked (never silently spends operator funds)', async () => {
@@ -133,6 +137,21 @@ describe('executeWorkflow — custody policy (non-custodial by default)', () => 
     expect(handlerMock).toHaveBeenCalledWith(
       expect.not.objectContaining({ owner: expect.anything() }),
       expect.anything(),
+      expect.objectContaining({ network: 'devnet' }),
+    );
+  });
+
+  it('blocks a fund-moving action on mainnet (defense in depth) and never runs it', async () => {
+    prismaMock.workflow.findUnique.mockResolvedValue({ ...delegatedWorkflow(), network: 'mainnet-beta' });
+
+    await executeWorkflow({
+      workflowId: 'wf_1',
+      triggerData: { triggerType: 'wallet_received_token', signature: 's' },
+    });
+
+    expect(handlerMock).not.toHaveBeenCalled();
+    expect(prismaMock.log.update).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ status: 'failed' }) }),
     );
   });
 });

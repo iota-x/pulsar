@@ -21,11 +21,15 @@ const actionInput = z.object({
   config: z.record(z.any()).default({}),
 });
 
+/** Solana cluster a workflow targets. Capability gating lives in workflowService. */
+const networkInput = z.enum(['devnet', 'mainnet-beta']);
+
 /** Create a full workflow (trigger + ordered actions) in one request. */
 export const createWorkflowSchema = z.object({
   name: z.string().min(1, 'Name is required'),
   description: z.string().optional(),
   isActive: z.boolean().optional(),
+  network: networkInput.default('devnet'),
   trigger: triggerInput,
   actions: z.array(actionInput).min(1, 'At least one action is required'),
 });
@@ -34,6 +38,7 @@ export const updateWorkflowSchema = z.object({
   name: z.string().min(1).optional(),
   description: z.string().optional(),
   isActive: z.boolean().optional(),
+  network: networkInput.optional(),
   trigger: triggerInput.optional(),
   actions: z.array(actionInput).optional(),
 });

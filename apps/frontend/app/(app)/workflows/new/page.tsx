@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { api } from '@/lib/api';
-import { TEMPLATE_BY_ID } from '@/lib/types';
+import { TEMPLATE_BY_ID, DEFAULT_NETWORK } from '@/lib/types';
 import {
   WorkflowBuilder,
   EMPTY_WORKFLOW,
@@ -14,6 +14,7 @@ import {
 export default function NewWorkflowPage() {
   const router = useRouter();
   const [initial, setInitial] = useState<WorkflowInitial | null>(null);
+  const [mainnetEnabled, setMainnetEnabled] = useState(false);
 
   // Prefill from a template (?template=<id>) — one-click recipe start. Resolve
   // before mounting the builder so its seeded state already reflects the recipe.
@@ -24,10 +25,17 @@ export default function NewWorkflowPage() {
     setInitial({
       name: tpl.name,
       description: tpl.description,
+      network: DEFAULT_NETWORK,
       triggerType: tpl.trigger.type,
       triggerConfig: { ...tpl.trigger.config },
       actions: tpl.actions.map((a) => ({ type: a.type, config: { ...a.config } })),
     });
+  }, []);
+
+  useEffect(() => {
+    api<{ mainnetEnabled: boolean }>('/config')
+      .then((c) => setMainnetEnabled(c.mainnetEnabled))
+      .catch(() => setMainnetEnabled(false));
   }, []);
 
   const create = async (draft: WorkflowDraft) => {
@@ -37,5 +45,13 @@ export default function NewWorkflowPage() {
 
   if (!initial) return <p className="text-slate-400">Loading…</p>;
 
-  return <WorkflowBuilder heading="New workflow" submitLabel="Save workflow" initial={initial} onSubmit={create} />;
+  return (
+    <WorkflowBuilder
+      heading="New workflow"
+      submitLabel="Save workflow"
+      initial={initial}
+      onSubmit={create}
+      mainnetEnabled={mainnetEnabled}
+    />
+  );
 }
